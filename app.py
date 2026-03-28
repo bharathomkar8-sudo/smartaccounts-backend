@@ -1,10 +1,11 @@
 from flask import Flask, request, send_file
 from flask_cors import CORS
 import pandas as pd
+import os
 
 app = Flask(__name__)
 
-# 🔥 IMPORTANT LINE
+# 🔥 FIX CORS
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route("/")
@@ -13,22 +14,30 @@ def home():
 
 @app.route("/upload-sales", methods=["POST"])
 def upload_sales():
-    file = request.files.get("file")
+    try:
+        file = request.files.get("file")
 
-    if not file:
-        return "No file uploaded"
+        if not file:
+            return "No file uploaded", 400
 
-    filepath = "input.xlsx"
-    file.save(filepath)
+        filepath = "input.xlsx"
+        file.save(filepath)
 
-    df = pd.read_excel(filepath)
+        df = pd.read_excel(filepath)
 
-    df["Processed"] = "Yes"
+        # Example processing
+        df["Processed"] = "Yes"
 
-    output_path = "output.xlsx"
-    df.to_excel(output_path, index=False)
+        output_path = "output.xlsx"
+        df.to_excel(output_path, index=False)
 
-    return send_file(output_path, as_attachment=True)
+        return send_file(output_path, as_attachment=True)
 
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+
+# 🔥 VERY IMPORTANT FOR RAILWAY
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
