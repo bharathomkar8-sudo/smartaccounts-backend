@@ -1,18 +1,70 @@
+from flask import Flask, request, send_file
+import pandas as pd
+import os
+import zipfile
+
+# ✅ MUST BE FIRST
+app = Flask(__name__)
+
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+# ---------------- HOME ----------------
+@app.route('/')
+def home():
+    return '''
+    <h2>Smart Accounts - Upload Excel</h2>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload</button>
+    </form>
+    '''
+
+
+# ---------------- UPLOAD ----------------
+@app.route('/upload', methods=['POST'])
+def upload():
+    file = request.files.get('file')
+
+    if not file:
+        return "No file uploaded"
+
+    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(filepath)
+
+    xls = pd.ExcelFile(filepath)
+    sheets = [s for s in xls.sheet_names if s != "GST Details"]
+
+    html = '<h3>Select Invoice Sheets</h3>'
+    html += '<form action="/process" method="post">'
+    html += f'<input type="hidden" name="filepath" value="{filepath}">'
+
+    for s in sheets:
+        html += f'<input type="checkbox" name="sheets" value="{s}" checked> {s}<br>'
+
+    html += '<br><button type="submit">Process</button>'
+    html += '</form>'
+
+    return html
+
+
+# ---------------- PROCESS ----------------
 @app.route('/process', methods=['POST'])
 def process():
 
-    filepath = request.form['filepath']
+    filepath = request.form.get('filepath')
     selected_sheets = request.form.getlist('sheets')
 
-    if not selected_sheets:
-        return "No sheets selected"
+    if not filepath or not selected_sheets:
+        return "Missing input"
 
     xls = pd.ExcelFile(filepath)
 
-    # GST MASTER
+    # GST Master
     try:
         gst_df = pd.read_excel(xls, sheet_name="GST Details")
-        gst_df.iloc[:,0] = gst_df.iloc[:,0].astype(str).str.strip().str.upper()
+        gst_df.iloc[:, 0] = gst_df.iloc[:, 0].astype(str).str.strip().str.upper()
     except:
         gst_df = None
 
@@ -29,65 +81,36 @@ def process():
 
                 df = pd.read_excel(xls, sheet_name=sheet, header=None)
 
-                # ---------------- HEADER ----------------
+                # -------- HEADER --------
                 vch_type = "Sales E-Invoice"
 
-                try:
-                    vch_no = str(df.iloc[10,16])
-                except:
-                    vch_no = sheet
+                vch_no = str(df.iloc[10, 16]) if df.shape[0] > 10 else sheet
+                vch_date = df.iloc[11, 16] if df.shape[0] > 11 else ""
+                order_no = df.iloc[19, 1] if df.shape[0] > 19 else ""
+                order_date = df.iloc[20, 1] if df.shape[0] > 20 else ""
+                other_ref = df.iloc[12, 16] if df.shape[0] > 12 else ""
+                pos = df.iloc[14, 5] if df.shape[0] > 14 else ""
 
-                try:
-                    vch_date = df.iloc[11,16]
-                except:
-                    vch_date = ""
-
-                try:
-                    order_no = df.iloc[19,1]
-                    order_date = df.iloc[20,1]
-                except:
-                    order_no = ""
-                    order_date = ""
-
-                try:
-                    other_ref = df.iloc[12,16]
-                except:
-                    other_ref = ""
-
-                try:
-                    pos = df.iloc[14,5]
-                except:
-                    pos = ""
-
-                # GST → PARTY
-                try:
-                    gstin = str(df.iloc[16,1]).strip().upper()
-                except:
-                    gstin = ""
-
+                # GST → Party
+                gstin = str(df.iloc[16, 1]).strip().upper() if df.shape[0] > 16 else ""
                 party_name = "UNKNOWN"
 
                 if gst_df is not None and gstin:
-                    match = gst_df[gst_df.iloc[:,0] == gstin]
+                    match = gst_df[gst_df.iloc[:, 0] == gstin]
                     if not match.empty:
-                        party_name = match.iloc[0,1]
+                        party_name = match.iloc[0, 1]
 
-                # ADDRESS
+                # Address
                 try:
                     address = f"{df.iloc[11,0]} {df.iloc[12,0]} {df.iloc[13,0]}"
                 except:
                     address = ""
 
-                try:
-                    state = df.iloc[14,1]
-                    pincode = df.iloc[15,1]
-                except:
-                    state = ""
-                    pincode = ""
+                state = df.iloc[14, 1] if df.shape[0] > 14 else ""
+                pincode = df.iloc[15, 1] if df.shape[0] > 15 else ""
 
-                # ---------------- ITEMS ----------------
+                # -------- ITEMS --------
                 rows = []
-
                 start_row = 25
 
                 try:
@@ -99,17 +122,15 @@ def process():
                     end_row = len(df)
 
                 for i in range(start_row, end_row):
-
                     try:
-                        item = df.iloc[i,1]
-                        qty = df.iloc[i,5]
-                        rate = df.iloc[i,8]
-                        amount = df.iloc[i,10]
+                        item = df.iloc[i, 1]
+                        qty = df.iloc[i, 5]
+                        rate = df.iloc[i, 8]
+                        amount = df.iloc[i, 10]
                     except:
                         continue
 
                     if pd.notna(qty) and qty != 0:
-
                         rows.append({
                             "Voucher Type": vch_type,
                             "VCH No / Inv No": vch_no,
@@ -130,7 +151,7 @@ def process():
                             "Amount": amount
                         })
 
-                # 🔥 ALWAYS CREATE FILE (even if empty)
+                # ALWAYS CREATE FILE
                 if len(rows) == 0:
                     rows.append({
                         "Voucher Type": vch_type,
@@ -141,18 +162,15 @@ def process():
 
                 out_df = pd.DataFrame(rows)
 
-                # ✅ ORIGINAL NAME (NO RANDOM)
                 file_name = f"{sheet}.xlsx"
                 file_path = os.path.join(UPLOAD_FOLDER, file_name)
 
                 out_df.to_excel(file_path, index=False)
-
                 zipf.write(file_path, arcname=file_name)
 
             except Exception as e:
-                print("ERROR IN SHEET:", sheet, e)
+                print("ERROR:", sheet, e)
 
-                # 🔥 STILL CREATE FILE (NO LOSS)
                 error_df = pd.DataFrame([{
                     "Sheet": sheet,
                     "Error": str(e)
@@ -165,3 +183,8 @@ def process():
                 zipf.write(file_path, arcname=file_name)
 
     return send_file(zip_path, as_attachment=True)
+
+
+# ---------------- RUN ----------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
