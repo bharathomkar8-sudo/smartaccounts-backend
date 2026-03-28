@@ -3,7 +3,9 @@ from flask_cors import CORS
 import pandas as pd
 
 app = Flask(__name__)
-CORS(app)
+
+# 🔥 IMPORTANT LINE
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route("/")
 def home():
@@ -21,7 +23,6 @@ def upload_sales():
 
     df = pd.read_excel(filepath)
 
-    # Example processing (you can change later)
     df["Processed"] = "Yes"
 
     output_path = "output.xlsx"
