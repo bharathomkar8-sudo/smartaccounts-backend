@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Smart Accounts</title>
+    <title>Smart Accounts - Excel Upload</title>
 </head>
-<body style="font-family: Arial; text-align: center; margin-top: 100px;">
+<body style="text-align:center; margin-top:100px; font-family:Arial;">
 
     <h2>Upload Excel File</h2>
 
@@ -11,8 +11,6 @@
     <br><br>
 
     <button onclick="uploadFile()">Upload & Process</button>
-
-    <p id="status"></p>
 
     <script>
         async function uploadFile() {
@@ -27,22 +25,28 @@
             const formData = new FormData();
             formData.append("file", file);
 
-            document.getElementById("status").innerText = "Processing...";
+            try {
+                const response = await fetch("https://smartaccounts-backend-production.up.railway.app/upload-sales", {
+                    method: "POST",
+                    body: formData
+                });
 
-            const response = await fetch("https://smartaccounts-backend-production.up.railway.app/upload-sales", {
-                method: "POST",
-                body: formData
-            });
+                if (!response.ok) {
+                    alert("Upload failed");
+                    return;
+                }
 
-            const blob = await response.blob();
+                const blob = await response.blob();
 
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "output.xlsx";
-            a.click();
+                const link = document.createElement("a");
+                link.href = window.URL.createObjectURL(blob);
+                link.download = "processed.xlsx";
+                link.click();
 
-            document.getElementById("status").innerText = "Done ✅";
+            } catch (error) {
+                alert("Error connecting to server");
+                console.error(error);
+            }
         }
     </script>
 
