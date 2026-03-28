@@ -1,53 +1,7 @@
-from flask import Flask, request, send_file
-import pandas as pd
-import os
-import zipfile
-
-app = Flask(__name__)
-
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-
-# 🔹 HOME
-@app.route('/')
-def home():
-    return '''
-    <h2>Upload Sales Excel</h2>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="file" name="file">
-        <button type="submit">Upload</button>
-    </form>
-    '''
-
-
-# 🔹 STEP 1: READ SHEETS
-@app.route('/upload', methods=['POST'])
-def upload():
-
-    file = request.files['file']
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(filepath)
-
-    xls = pd.ExcelFile(filepath)
-    sheets = [s for s in xls.sheet_names if s != "GST Details"]
-
-    html = '<h3>Select Invoice Sheets</h3>'
-    html += '<form action="/process" method="post">'
-    html += f'<input type="hidden" name="filepath" value="{filepath}">'
-
-    for s in sheets:
-        html += f'<input type="checkbox" name="sheets" value="{s}">{s}<br>'
-
-    html += '<button type="submit">Process</button>'
-    html += '</form>'
-
-    return html
-
-
-# 🔹 STEP 2: PROCESS
 @app.route('/process', methods=['POST'])
 def process():
+
+    import uuid
 
     filepath = request.form['filepath']
     selected_sheets = request.form.getlist('sheets')
@@ -59,35 +13,28 @@ def process():
 
     zip_path = os.path.join(UPLOAD_FOLDER, "output.zip")
 
+    # 🔥 REMOVE OLD ZIP
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+
     with zipfile.ZipFile(zip_path, 'w') as zipf:
 
         for sheet in selected_sheets:
 
+            print("Processing:", sheet)   # DEBUG
+
             df = pd.read_excel(xls, sheet_name=sheet, header=None)
 
             try:
-                # 🔹 HEADER FIXED
                 vch_no = str(df.iloc[10,16])
                 vch_date = df.iloc[11,16]
 
-                order_no = df.iloc[19,1]
-                order_date = df.iloc[20,1]
-                pos = df.iloc[14,5]
-
-                # 🔹 GST → PARTY
                 gstin = str(df.iloc[16,1]).strip().upper()
+
                 match = gst_df[gst_df.iloc[:,0] == gstin]
                 party_name = match.iloc[0,1] if not match.empty else "UNKNOWN"
 
-                # 🔹 ADDRESS (FIXED CORRECT)
-                address1 = str(df.iloc[11,0])
-                address2 = str(df.iloc[12,0])
-                address3 = str(df.iloc[13,0])
-
-                state = df.iloc[14,1]
-                pincode = df.iloc[15,1]
-
-                # 🔹 FIND END
+                # 🔥 FIND END ROW
                 end_row = df[df.apply(
                     lambda r: r.astype(str).str.contains("GST Break up", case=False).any(),
                     axis=1
@@ -99,39 +46,33 @@ def process():
 
                 for i in range(start_row, end_row):
 
-                    desc = df.iloc[i,1]
                     qty = df.iloc[i,5]
                     rate = df.iloc[i,8]
-                    amount = df.iloc[i,10]
 
                     if pd.notna(qty) and qty > 0:
 
                         rows.append({
-                            "Voucher Type": "Sales E-Invoice",
                             "VCH No": vch_no,
-                            "Date": vch_date,
                             "Party": party_name,
-                            "GSTIN": gstin,
-                            "Address1": address1,
-                            "Address2": address2,
-                            "Address3": address3,
-                            "State": state,
-                            "Pincode": pincode,
-                            "Item": desc,
                             "Qty": qty,
-                            "Rate": rate,
-                            "Amount": amount,
-                            "POS": pos,
-                            "Order No": order_no,
-                            "Order Date": order_date
+                            "Rate": rate
                         })
+
+                # 🔥 IMPORTANT CHECK
+                if len(rows) == 0:
+                    print(f"Skipping empty sheet: {sheet}")
+                    continue
 
                 out_df = pd.DataFrame(rows)
 
-                file_name = f"{sheet}.xlsx"
+                # 🔥 UNIQUE FILE NAME
+                unique = str(uuid.uuid4())[:6]
+                file_name = f"{sheet}_{unique}.xlsx"
                 file_path = os.path.join(UPLOAD_FOLDER, file_name)
 
                 out_df.to_excel(file_path, index=False)
+
+                print("Adding to ZIP:", file_name)
 
                 zipf.write(file_path, arcname=file_name)
 
@@ -140,7 +81,3 @@ def process():
                 continue
 
     return send_file(zip_path, as_attachment=True)
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
