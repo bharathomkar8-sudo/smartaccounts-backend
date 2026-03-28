@@ -1,7 +1,9 @@
 from flask import Flask, request, send_file
+from flask_cors import CORS
 import pandas as pd
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route("/")
 def home():
@@ -19,9 +21,13 @@ def upload_sales():
 
     df = pd.read_excel(filepath)
 
+    # Example processing (you can change later)
+    df["Processed"] = "Yes"
+
     output_path = "output.xlsx"
     df.to_excel(output_path, index=False)
 
     return send_file(output_path, as_attachment=True)
 
-app.run(host="0.0.0.0", port=8080)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
