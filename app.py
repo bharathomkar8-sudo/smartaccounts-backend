@@ -46,17 +46,14 @@ def upload():
 
 
 # ---------------- FORMAT ----------------
-def create_formatted_excel(file_path, rows):
+def create_excel(file_path, rows):
 
     headers = [
         "Voucher Type","VCH No / Inv No","Description","VCH Date",
         "Order No","Order Date","Other Ref","POS",
         "Party Name","Address","State","Pincode","Party GSTIN",
         "Consignee Name","Con Address","Consignee State","Consignee Pincode","Con GSTIN",
-        "Item Name / Code","Is Item Header","width","Height","Qty","Extraudf",
-        "Billedqty","Rate","Taxable Value","Dis%","Amount",
-        "Sales Ledger","CGST Ledger","CGST Amt","SGST Ledger","SGST Amount",
-        "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
+        "Item Name / Code","Is Item Header"
     ]
 
     wb = Workbook()
@@ -65,17 +62,21 @@ def create_formatted_excel(file_path, rows):
     yellow = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
     bold = Font(bold=True)
 
+    # HEADER
     for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.fill = yellow
-        cell.font = bold
+        c = ws.cell(row=1, column=col, value=h)
+        c.fill = yellow
+        c.font = bold
 
+    # DATA
     for r, row in enumerate(rows, 2):
         for c, h in enumerate(headers, 1):
             ws.cell(row=r, column=c, value=row.get(h, ""))
 
     wb.save(file_path)
 
+
+# ---------------- PROCESS ----------------
 @app.route('/process', methods=['POST'])
 def process():
 
@@ -92,103 +93,101 @@ def process():
     with zipfile.ZipFile(zip_path, 'w') as zipf:
 
         for sheet in selected_sheets:
+
+            df = pd.read_excel(xls, sheet_name=sheet, header=None)
+
+            # HEADER DATA
+            vch_type = "Sales E-Invoice"
+            vch_no = str(df.iloc[10, 16])
+            vch_date = pd.to_datetime(df.iloc[11, 16]).strftime("%d-%m-%Y")
+            order_no = df.iloc[19, 1]
+            order_date = pd.to_datetime(df.iloc[20, 1]).strftime("%d-%m-%Y")
+            other_ref = df.iloc[12, 16]
+            pos = df.iloc[14, 5]
+
+            party_name = "M/S. Bharath"
+            gstin = str(df.iloc[16, 1])
+
+            # ADDRESS
+            addr1 = df.iloc[10, 0]
+            addr2 = df.iloc[11, 0]
+            addr3 = df.iloc[12, 0]
+
+            # CONSIGNEE ADDRESS (FIXED)
+            con1 = df.iloc[12, 4]
+            con2 = df.iloc[13, 4]
+
+            rows = []
+
+            # -------- FIRST ROW (ROW 2) --------
+            start = 25  # B26
+
+            desc = df.iloc[start, 1]
+
+            # ITEM CODE LOGIC
             try:
-                df = pd.read_excel(xls, sheet_name=sheet, header=None)
+                val = df.iloc[start, 2]
+                item_code = val if pd.notna(val) and float(val) > 1 else "Header"
+            except:
+                item_code = "Header"
 
-                # ---------------- HEADER ----------------
-                vch_type = "Sales E-Invoice"
-                vch_no = str(df.iloc[10, 16])
-                vch_date = pd.to_datetime(df.iloc[11, 16]).strftime("%d-%m-%Y")
-                order_no = df.iloc[19, 1]
-                order_date = pd.to_datetime(df.iloc[20, 1]).strftime("%d-%m-%Y")
-                other_ref = df.iloc[12, 16]
-                pos = df.iloc[14, 5]
+            is_header = "Yes" if item_code == "Header" else ""
 
-                party_name = "M/S. Bharath"
-                gstin = str(df.iloc[16, 1])
+            rows.append({
+                "Voucher Type": vch_type,
+                "VCH No / Inv No": vch_no,
+                "Description": desc,
+                "VCH Date": vch_date,
+                "Order No": order_no,
+                "Order Date": order_date,
+                "Other Ref": other_ref,
+                "POS": pos,
+                "Party Name": party_name,
+                "Address": addr1,
+                "Party GSTIN": gstin,
+                "Consignee Name": party_name,
+                "Con Address": con1,
+                "Item Name / Code": item_code,
+                "Is Item Header": is_header
+            })
 
-                # ADDRESS
-                addr1 = df.iloc[10, 0]
-                addr2 = df.iloc[11, 0]
-                addr3 = df.iloc[12, 0]
+            # -------- ADDRESS CONTINUE --------
+            rows.append({"Address": addr2, "Con Address": con2})
+            rows.append({"Address": addr3})
 
-                # CONSIGNEE ADDRESS (FIXED)
-                con_addr1 = df.iloc[12, 4]
-                con_addr2 = df.iloc[13, 4]
+            # -------- DESCRIPTION LOOP --------
+            end = len(df)
 
-                rows = []
+            for i in range(start + 1, len(df)):
+                val = str(df.iloc[i, 1]).strip()
+                if val.startswith("___"):
+                    end = i
+                    break
 
-                # ---------------- HEADER ROW ----------------
+            for i in range(start + 1, end):
+
+                desc = df.iloc[i, 1]
+                if pd.isna(desc):
+                    desc = ""
+
+                try:
+                    val = df.iloc[i, 2]
+                    item_code = val if pd.notna(val) and float(val) > 1 else "Header"
+                except:
+                    item_code = "Header"
+
+                is_header = "Yes" if item_code == "Header" else ""
+
                 rows.append({
-                    "Voucher Type": vch_type,
-                    "VCH No / Inv No": vch_no,
-                    "VCH Date": vch_date,
-                    "Order No": order_no,
-                    "Order Date": order_date,
-                    "Other Ref": other_ref,
-                    "POS": pos,
-                    "Party Name": party_name,
-                    "Address": addr1,
-                    "Party GSTIN": gstin,
-                    "Consignee Name": party_name,
-                    "Con Address": con_addr1
+                    "Description": desc,
+                    "Item Name / Code": item_code,
+                    "Is Item Header": is_header
                 })
 
-                # Address continuation
-                rows.append({"Address": addr2})
-                rows.append({"Address": addr3})
-
-                # Consignee continuation (FIXED → NO GAP)
-                rows.append({"Con Address": con_addr2})
-
-                # ---------------- DESCRIPTION ----------------
-                start_row = 25  # B26
-                end_row = len(df)
-
-                for i in range(start_row, len(df)):
-                    val = str(df.iloc[i, 1]).strip()
-                    if val.startswith("___"):
-                        end_row = i
-                        break
-
-                # Start writing from NEXT ROW (so C2 alignment correct)
-                for i in range(start_row, end_row):
-
-                    desc = df.iloc[i, 1]
-
-                    if pd.isna(desc):
-                        desc = ""
-
-                    # -------- ITEM NAME LOGIC --------
-                    try:
-                        col_c = df.iloc[i, 2]
-                        if pd.notna(col_c) and col_c != "" and float(col_c) > 1:
-                            item_code = col_c
-                        else:
-                            item_code = "Header"
-                    except:
-                        item_code = "Header"
-
-                    # -------- IS ITEM HEADER --------
-                    is_header = "Yes" if item_code == "Header" else ""
-
-                    row = {
-                        "Description": desc,
-                        "Item Name / Code": item_code,
-                        "Is Item Header": is_header
-                    }
-
-                    rows.append(row)
-
-                # ---------------- SAVE ----------------
-                file_name = f"{sheet}.xlsx"
-                file_path = os.path.join(UPLOAD_FOLDER, file_name)
-
-                create_formatted_excel(file_path, rows)
-                zipf.write(file_path, arcname=file_name)
-
-            except Exception as e:
-                print("ERROR:", sheet, e)
+            # SAVE
+            file_path = os.path.join(UPLOAD_FOLDER, f"{sheet}.xlsx")
+            create_excel(file_path, rows)
+            zipf.write(file_path, arcname=f"{sheet}.xlsx")
 
     return send_file(zip_path, as_attachment=True)
 
