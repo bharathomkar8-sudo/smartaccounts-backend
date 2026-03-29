@@ -5,34 +5,36 @@ from io import BytesIO
 
 app = Flask(__name__)
 
+# 🔴 GLOBAL STORAGE (IMPORTANT FIX)
+uploaded_file = None
+
 # =========================
-# STEP 1: UPLOAD + SHEET LIST
+# STEP 1: UPLOAD
 # =========================
 @app.route('/', methods=['GET', 'POST'])
 def upload():
+    global uploaded_file
 
     if request.method == 'POST':
         file = request.files['file']
 
-        file_stream = file.read()
-        xls = pd.ExcelFile(BytesIO(file_stream))
+        # ✅ STORE FILE IN MEMORY (NO HEX)
+        uploaded_file = BytesIO(file.read())
 
+        xls = pd.ExcelFile(uploaded_file)
         sheets = xls.sheet_names
 
         return render_template_string('''
         <h2>Select Invoice Sheets</h2>
 
-        <form method="POST" action="/process" enctype="multipart/form-data">
-            <input type="hidden" name="file_data" value="{{file_data}}">
-
+        <form method="POST" action="/process">
             {% for s in sheets %}
                 <input type="checkbox" name="sheets" value="{{s}}" checked> {{s}}<br>
             {% endfor %}
-
             <br>
             <button type="submit">Process</button>
         </form>
-        ''', sheets=sheets, file_data=file_stream.hex())
+        ''', sheets=sheets)
 
     return '''
     <h2>Upload Excel</h2>
@@ -47,11 +49,14 @@ def upload():
 # =========================
 @app.route('/process', methods=['POST'])
 def process():
+    global uploaded_file
 
     selected_sheets = request.form.getlist('sheets')
 
-    file_data = bytes.fromhex(request.form['file_data'])
-    xls = pd.ExcelFile(BytesIO(file_data))
+    # 🔴 RESET POINTER (VERY IMPORTANT)
+    uploaded_file.seek(0)
+
+    xls = pd.ExcelFile(uploaded_file)
 
     output_files = []
 
@@ -62,9 +67,7 @@ def process():
             if df.shape[0] < 30:
                 continue
 
-            # =========================
             # HEADER
-            # =========================
             voucher_type = "Sales E-Invoice"
             vch_no = df.iloc[1, 0]
             vch_date = df.iloc[1, 3]
@@ -75,24 +78,17 @@ def process():
             party_name = df.iloc[10, 0]
             gstin = df.iloc[10, 1]
 
-            # =========================
-            # ADDRESS (3 lines)
-            # =========================
+            # ADDRESS
             addr1 = df.iloc[11, 0]
             addr2 = df.iloc[12, 0]
             addr3 = df.iloc[13, 0]
 
-            # =========================
-            # CONSIGNEE ADDRESS
-            # =========================
+            # CONSIGNEE
             con_addr1 = df.iloc[11, 4]
             con_addr2 = df.iloc[12, 4]
 
-            # =========================
-            # DESCRIPTION (B26 → ___)
-            # =========================
+            # DESCRIPTION
             descriptions = []
-
             for i in range(25, len(df)):
                 val = str(df.iloc[i, 1]).strip()
 
@@ -104,12 +100,9 @@ def process():
 
                 descriptions.append(val)
 
-            # =========================
             # BUILD OUTPUT
-            # =========================
             rows = []
 
-            # HEADER ROW
             rows.append({
                 "Voucher Type": voucher_type,
                 "VCH No / Inv No": vch_no,
@@ -133,14 +126,10 @@ def process():
                 "Is Item Header": "Yes"
             })
 
-            # Address continuation
             rows.append({"Address": addr2})
             rows.append({"Address": addr3})
-
-            # Consignee continuation
             rows.append({"Con Address": con_addr2})
 
-            # Description rows
             for desc in descriptions:
                 rows.append({
                     "Description": desc,
@@ -148,9 +137,7 @@ def process():
                     "Is Item Header": "Yes" if len(desc) <= 1 else ""
                 })
 
-            # =========================
-            # SAVE FILE
-            # =========================
+            # SAVE
             out_df = pd.DataFrame(rows)
 
             output = BytesIO()
@@ -163,9 +150,7 @@ def process():
             print("ERROR:", sheet, e)
             continue
 
-    # =========================
-    # ZIP DOWNLOAD
-    # =========================
+    # ZIP
     memory_file = BytesIO()
 
     with zipfile.ZipFile(memory_file, 'w') as zf:
@@ -177,8 +162,5 @@ def process():
     return send_file(memory_file, download_name='output.zip', as_attachment=True)
 
 
-# =========================
-# RUN
-# =========================
 if __name__ == "__main__":
     app.run(debug=True)
