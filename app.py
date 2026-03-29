@@ -2,6 +2,8 @@ from flask import Flask, request, send_file
 import pandas as pd
 import os
 import zipfile
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 
 # ✅ MUST BE FIRST
 app = Flask(__name__)
@@ -47,6 +49,40 @@ def upload():
     html += '</form>'
 
     return html
+
+
+# ---------------- FORMAT FUNCTION ----------------
+def create_formatted_excel(file_path, rows):
+
+    headers = [
+        "Voucher Type","VCH No / Inv No","Description","VCH Date",
+        "Order No","Order Date","Other Ref","POS",
+        "Party Name","Address","State","Pincode","Party GSTIN",
+        "Consignee Name","Con Address","Consignee State","Consignee Pincode","Con GSTIN",
+        "Item Name / Code","Is Item Header","width","Height","Qty","Extraudf",
+        "Billedqty","Rate","Taxable Value","Dis%","Amount",
+        "Sales Ledger","CGST Ledger","CGST Amt","SGST Ledger","SGST Amount",
+        "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
+    ]
+
+    wb = Workbook()
+    ws = wb.active
+
+    yellow = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
+    bold = Font(bold=True)
+
+    # Header
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = yellow
+        cell.font = bold
+
+    # Data
+    for r, row in enumerate(rows, 2):
+        for c, h in enumerate(headers, 1):
+            ws.cell(row=r, column=c, value=row.get(h, ""))
+
+    wb.save(file_path)
 
 
 # ---------------- PROCESS ----------------
@@ -147,40 +183,34 @@ def process():
                             "Party GSTIN": gstin,
                             "Item Name / Code": item,
                             "Qty": qty,
+                            "Billedqty": qty,
                             "Rate": rate,
-                            "Amount": amount
+                            "Taxable Value": amount,
+                            "Amount": amount,
+                            "Sales Ledger": "Sales",
+                            "Item header": item
                         })
 
-                # ALWAYS CREATE FILE
+                # fallback
                 if len(rows) == 0:
                     rows.append({
                         "Voucher Type": vch_type,
                         "VCH No / Inv No": vch_no,
                         "Party Name": party_name,
-                        "Note": "No items found"
+                        "Item header": "No items"
                     })
 
-                out_df = pd.DataFrame(rows)
-
-                file_name = f"{sheet}.xlsx"
+                # ✅ UNIQUE FILE (no overwrite issue)
+                file_name = f"{sheet}_{os.getpid()}.xlsx"
                 file_path = os.path.join(UPLOAD_FOLDER, file_name)
 
-                out_df.to_excel(file_path, index=False)
-                zipf.write(file_path, arcname=file_name)
+                # ✅ USE FORMAT FUNCTION
+                create_formatted_excel(file_path, rows)
+
+                zipf.write(file_path, arcname=f"{sheet}.xlsx")
 
             except Exception as e:
                 print("ERROR:", sheet, e)
-
-                error_df = pd.DataFrame([{
-                    "Sheet": sheet,
-                    "Error": str(e)
-                }])
-
-                file_name = f"{sheet}_error.xlsx"
-                file_path = os.path.join(UPLOAD_FOLDER, file_name)
-
-                error_df.to_excel(file_path, index=False)
-                zipf.write(file_path, arcname=file_name)
 
     return send_file(zip_path, as_attachment=True)
 
