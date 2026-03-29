@@ -13,109 +13,122 @@ COLUMNS = [
     "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
 ]
 
-# =========================
-# MAIN FUNCTION (IMPORTANT)
-# =========================
 def process_sheet(df):
 
     rows = []
 
     # =========================
-    # HEADER DATA
-    # =========================
-    voucher = str(df.iloc[1, 0])
-    inv_no = str(df.iloc[1, 1])
-    main_desc = str(df.iloc[1, 2])
-
-    party_name = str(df.iloc[1, 8])
-    gst = str(df.iloc[1, 12])
-
-    # ADDRESS (FIXED - NO DUPLICATE)
-    addr1 = str(df.iloc[1, 9])
-    addr2 = str(df.iloc[2, 9]) if pd.notna(df.iloc[2, 9]) else ""
-    addr3 = str(df.iloc[3, 9]) if pd.notna(df.iloc[3, 9]) else ""
-
-    full_address = ", ".join([x for x in [addr1, addr2, addr3] if x and x != "nan"])
-
-    state = str(df.iloc[1, 10])
-    pincode = str(df.iloc[1, 11])
-
-    # =========================
-    # MAIN HEADER ROW
+    # HEADER MAPPING (AS PER YOUR EXCEL)
     # =========================
     header = dict.fromkeys(COLUMNS, "")
 
-    header["Voucher Type"] = voucher
-    header["VCH No / Inv No"] = inv_no
-    header["Description"] = main_desc
+    header["Voucher Type"] = "Sales E-Invoice"
+    header["VCH No / Inv No"] = str(df.iloc[10, 16])   # Q11
 
-    header["Party Name"] = party_name
+    header["VCH Date"] = str(df.iloc[11, 16])          # Q12
+    header["Order No"] = str(df.iloc[19, 1])           # B20
+    header["Order Date"] = str(df.iloc[20, 1])         # B21
+    header["Other Ref"] = str(df.iloc[12, 16])         # Q13
+    header["POS"] = str(df.iloc[14, 5])                # F15
+
+    # ADDRESS (A12:A14 → combined)
+    addr1 = str(df.iloc[11, 0])
+    addr2 = str(df.iloc[12, 0])
+    addr3 = str(df.iloc[13, 0])
+    full_address = ", ".join([x for x in [addr1, addr2, addr3] if x and x != "nan"])
+
     header["Address"] = full_address
-    header["State"] = state
-    header["Pincode"] = pincode
-    header["Party GSTIN"] = gst
 
-    header["Consignee Name"] = party_name
-    header["Con Address"] = full_address
-    header["Con GSTIN"] = gst
+    header["State"] = str(df.iloc[14, 1])              # B15
+    header["Pincode"] = str(df.iloc[15, 1])            # B16
+    header["Party GSTIN"] = str(df.iloc[16, 1])        # B17
+
+    # CONSIGNEE
+    con1 = str(df.iloc[12, 4])
+    con2 = str(df.iloc[13, 4])
+    con_address = ", ".join([x for x in [con1, con2] if x and x != "nan"])
+
+    header["Consignee Name"] = header["Party Name"]
+    header["Con Address"] = con_address
+    header["Consignee State"] = str(df.iloc[14, 5])
+    header["Consignee Pincode"] = str(df.iloc[15, 5])
+    header["Con GSTIN"] = str(df.iloc[16, 1])
 
     header["Item Name / Code"] = "Header"
     header["Is Item Header"] = "Yes"
-    header["Item header"] = main_desc
+    header["Item header"] = str(df.iloc[25, 2])
 
     rows.append(header)
 
     # =========================
-    # DESCRIPTION (B26 onwards)
+    # ITEM MAPPING (START B26)
     # =========================
-    descriptions = []
+    for i in range(25, len(df)):
 
-    for i in range(5, len(df)):
-        val = df.iloc[i, 2]
-        if pd.isna(val):
+        desc = df.iloc[i, 2]
+
+        if pd.isna(desc):
             break
-        descriptions.append(str(val))
 
-    # =========================
-    # LOOP ITEMS
-    # =========================
-    for desc in descriptions:
+        desc = str(desc).strip()
 
         row = dict.fromkeys(COLUMNS, "")
 
-        # HEADER TYPE LINE
-        if len(desc.strip()) < 6:
-            row["Description"] = desc
+        # =========================
+        # ITEM NAME / HEADER LOGIC
+        # =========================
+        try:
+            item_code = df.iloc[i, 2]
+            if isinstance(item_code, (int, float)) and item_code > 1:
+                row["Item Name / Code"] = str(int(item_code))
+            else:
+                row["Item Name / Code"] = "Header"
+        except:
             row["Item Name / Code"] = "Header"
-            row["Is Item Header"] = "Yes"
-            row["Item header"] = desc
-            rows.append(row)
-            continue
 
-        # NORMAL ITEM
-        qty = 10
-        rate = 500
+        if row["Item Name / Code"] == "Header":
+            row["Is Item Header"] = "Yes"
+
+        # =========================
+        # BASIC
+        # =========================
+        row["Description"] = desc
+        row["Item header"] = desc
+
+        # =========================
+        # VALUE MAPPING (AS PER YOUR FORMULA)
+        # =========================
+        def safe(val):
+            return "" if pd.isna(val) or val == 0 else val
+
+        row["width"] = safe(df.iloc[i, 3])     # D
+        row["Height"] = safe(df.iloc[i, 4])    # E
+        row["Qty"] = safe(df.iloc[i, 5])       # F
+        row["Extraudf"] = safe(df.iloc[i, 6])  # G
+        row["Billedqty"] = safe(df.iloc[i, 6]) # G
+        row["Rate"] = safe(df.iloc[i, 8])      # I
+
+        # =========================
+        # CALCULATION
+        # =========================
+        try:
+            qty = float(row["Qty"]) if row["Qty"] != "" else 0
+            rate = float(row["Rate"]) if row["Rate"] != "" else 0
+        except:
+            qty, rate = 0, 0
 
         taxable = qty * rate
-        gst_amt = round(taxable * 0.18, 2)
-        total = taxable + gst_amt
+        gst = round(taxable * 0.18, 2)
+        total = taxable + gst
 
-        row["Description"] = desc
-        row["Item Name / Code"] = "391990"
-
-        row["Qty"] = qty
-        row["Billedqty"] = qty
-        row["Rate"] = rate
-
-        row["Taxable Value"] = taxable
-        row["Amount"] = taxable
+        row["Taxable Value"] = taxable if taxable else ""
+        row["Amount"] = taxable if taxable else ""
 
         row["Sales Ledger"] = "GST IGST Sales@18%"
         row["IGST Ledger"] = "OUTPUT IGST @ 18%"
-        row["IGST Amount"] = gst_amt
+        row["IGST Amount"] = gst if gst else ""
 
-        row["Invoice Amt"] = total
-        row["Item header"] = desc
+        row["Invoice Amt"] = total if total else ""
 
         rows.append(row)
 
