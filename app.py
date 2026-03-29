@@ -4,8 +4,20 @@ import zipfile
 from io import BytesIO
 
 app = Flask(__name__)
-
 uploaded_file = None
+
+# =========================
+# FINAL COLUMN STRUCTURE
+# =========================
+COLUMNS = [
+"Voucher Type","VCH No / Inv No","Description","VCH Date","Order No","Order Date","Other Ref","POS",
+"Party Name","Address","State","Pincode","Party GSTIN",
+"Consignee Name","Con Address","Consignee State","Consignee Pincode","Con GSTIN",
+"Item Name / Code","Is Item Header","width","Height","Qty","Extraudf","Billedqty","Rate",
+"Taxable Value","Dis%","Amount","Sales Ledger",
+"CGST Ledger","CGST Amt","SGST Ledger","SGST Amount",
+"IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
+]
 
 # =========================
 # UPLOAD
@@ -67,7 +79,6 @@ def process():
             party_name = df.iloc[10, 0]
             gstin = df.iloc[10, 1]
 
-            # ADDRESS (NO MERGE)
             addr1 = str(df.iloc[11, 0]).strip()
             addr2 = str(df.iloc[12, 0]).strip()
             addr3 = str(df.iloc[13, 0]).strip()
@@ -82,7 +93,7 @@ def process():
                     pincode = parts[1].strip()
                     state = parts[0].split(",")[-1].strip()
 
-            # DESCRIPTION (STRICT B26)
+            # DESCRIPTION (B26)
             descriptions = []
             for i in range(25, len(df)):
                 val = str(df.iloc[i, 1]).strip()
@@ -98,47 +109,75 @@ def process():
             rows = []
 
             # =========================
-            # ROW 1 (MAIN HEADER)
+            # HEADER ROW
             # =========================
-            rows.append({
-                "Voucher Type": "Sales E-Invoice",
-                "VCH No / Inv No": vch_no,
-                "Description": descriptions[0] if descriptions else "",
-                "VCH Date": vch_date,
-                "Order No": order_no,
-                "Order Date": order_date,
-                "Other Ref": other_ref,
-                "POS": "",
-                "Party Name": party_name,
-                "Address": addr1,
-                "State": state,
-                "Pincode": pincode,
-                "Party GSTIN": gstin
-            })
+            row = dict.fromkeys(COLUMNS, "")
+
+            row["Voucher Type"] = "Sales E-Invoice"
+            row["VCH No / Inv No"] = vch_no
+            row["Description"] = descriptions[0]
+            row["VCH Date"] = vch_date
+            row["Order No"] = order_no
+            row["Order Date"] = order_date
+            row["Other Ref"] = other_ref
+            row["Party Name"] = party_name
+            row["Address"] = addr1
+            row["State"] = state
+            row["Pincode"] = pincode
+            row["Party GSTIN"] = gstin
+
+            row["Consignee Name"] = party_name
+            row["Con Address"] = addr1
+            row["Con GSTIN"] = gstin
+
+            row["Item Name / Code"] = "Header"
+            row["Is Item Header"] = "Yes"
+            row["Item header"] = descriptions[0]
+
+            rows.append(row)
 
             # =========================
-            # ROW 2 (ADDRESS LINE 2)
+            # SECOND ROW (ADDRESS CONTINUE)
             # =========================
-            rows.append({
-                "Address": addr2
-            })
+            row = dict.fromkeys(COLUMNS, "")
+            row["Description"] = descriptions[1] if len(descriptions) > 1 else ""
+            row["Address"] = addr2
+            row["Con Address"] = addr2
+            row["Item Name / Code"] = "Header"
+            row["Is Item Header"] = "Yes"
+            row["Item header"] = descriptions[1] if len(descriptions) > 1 else ""
+            rows.append(row)
 
             # =========================
-            # ROW 3 (ADDRESS LINE 3)
+            # THIRD ROW (FINAL ADDRESS)
             # =========================
-            rows.append({
-                "Address": addr3
-            })
+            row = dict.fromkeys(COLUMNS, "")
+            row["Address"] = addr3
+            row["Con Address"] = addr3
+            rows.append(row)
 
             # =========================
-            # DESCRIPTION CONTINUE (NO REPEAT)
+            # ITEM ROWS
             # =========================
-            for desc in descriptions[1:]:
-                rows.append({
-                    "Description": desc
-                })
+            for desc in descriptions[2:]:
 
-            out_df = pd.DataFrame(rows)
+                row = dict.fromkeys(COLUMNS, "")
+
+                row["Description"] = desc
+                row["Item Name / Code"] = "391990"   # default (change later dynamic)
+                row["Qty"] = 1
+                row["Rate"] = 500
+                row["Taxable Value"] = 5000
+                row["Amount"] = 4900
+                row["Sales Ledger"] = "GST IGST Sales@18%"
+                row["IGST Ledger"] = "OUTPUT IGST @ 18%"
+                row["IGST Amount"] = 900
+                row["Invoice Amt"] = 5801
+                row["Item header"] = desc
+
+                rows.append(row)
+
+            out_df = pd.DataFrame(rows, columns=COLUMNS)
 
             output = BytesIO()
             out_df.to_excel(output, index=False)
@@ -153,8 +192,8 @@ def process():
     memory_file = BytesIO()
 
     with zipfile.ZipFile(memory_file, 'w') as zf:
-        for filename, data in output_files:
-            zf.writestr(filename, data.getvalue())
+        for name, data in output_files:
+            zf.writestr(name, data.getvalue())
 
     memory_file.seek(0)
 
