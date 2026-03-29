@@ -114,23 +114,40 @@ def process_sheet(df):
     row["Con Address"] = addr3
     rows.append(row)
 
-    # =========================
-    # ITEM ROWS
-    # =========================
-    for desc in descriptions[2:]:
+  # =========================
+# ITEM ROWS (FINAL LOGIC)
+# =========================
+for desc in descriptions[2:]:
 
-        row = dict.fromkeys(COLUMNS, "")
+    row = dict.fromkeys(COLUMNS, "")
 
-        row["Description"] = desc
-        row["Item Name / Code"] = desc
-        row["Item header"] = desc
+    # BASIC
+    row["Description"] = desc
+    row["Item Name / Code"] = "391990"   # TODO: later dynamic
+    row["Item header"] = desc
 
-        # 👉 DEFAULT VALUES (can improve later)
-        row["Qty"] = 1
-        row["Rate"] = 0
-        row["Taxable Value"] = 0
-        row["Amount"] = 0
+    # DEFAULT INPUT (can later read from Excel)
+    qty = 10
+    rate = 500
 
-        rows.append(row)
+    taxable = qty * rate
+    gst = round(taxable * 0.18, 2)
+    total = taxable + gst
 
+    # FILL VALUES
+    row["Qty"] = qty
+    row["Billedqty"] = qty
+    row["Rate"] = rate
+
+    row["Taxable Value"] = taxable
+    row["Amount"] = taxable
+
+    # GST LOGIC (IGST DEFAULT)
+    row["Sales Ledger"] = "GST IGST Sales@18%"
+    row["IGST Ledger"] = "OUTPUT IGST @ 18%"
+    row["IGST Amount"] = gst
+
+    row["Invoice Amt"] = total
+
+    rows.append(row)
     return pd.DataFrame(rows, columns=COLUMNS)
