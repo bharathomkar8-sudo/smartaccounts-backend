@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, render_template_string
 import pandas as pd
 import os
 import zipfile
@@ -7,29 +7,36 @@ from io import BytesIO
 app = Flask(__name__)
 
 # =========================
-# HOME
+# HOME (UPLOAD + SHEET LIST)
 # =========================
-@app.route('/')
-def home():
-    return '''
-    <h2>Smart Accounts</h2>
-    <a href="/upload">Go to Upload</a>
-    '''
+@app.route('/', methods=['GET', 'POST'])
+def upload():
 
-# =========================
-# UPLOAD PAGE
-# =========================
-@app.route('/upload')
-def upload_page():
+    if request.method == 'POST':
+        file = request.files['file']
+        xls = pd.ExcelFile(file)
+
+        sheets = xls.sheet_names
+
+        # store file temporarily
+        file.save("temp.xlsx")
+
+        return render_template_string('''
+        <h2>Select Invoice Sheets</h2>
+        <form method="POST" action="/process">
+            {% for s in sheets %}
+                <input type="checkbox" name="sheets" value="{{s}}" checked> {{s}}<br>
+            {% endfor %}
+            <br>
+            <button type="submit">Process</button>
+        </form>
+        ''', sheets=sheets)
+
     return '''
     <h2>Upload Excel</h2>
-    <form method="POST" action="/process" enctype="multipart/form-data">
-        <input type="file" name="file" required><br><br>
-
-        Sheet Names (comma separated):<br>
-        <input type="text" name="sheets" placeholder="2311,2661"><br><br>
-
-        <button type="submit">Process</button>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload</button>
     </form>
     '''
 
@@ -39,24 +46,21 @@ def upload_page():
 @app.route('/process', methods=['POST'])
 def process():
 
-    file = request.files['file']
-    selected_sheets = request.form.get('sheets').split(',')
+    selected_sheets = request.form.getlist('sheets')
+
+    xls = pd.ExcelFile("temp.xlsx")
 
     output_files = []
-    xls = pd.ExcelFile(file)
 
     for sheet in selected_sheets:
-        sheet = sheet.strip()
-
         try:
             df = pd.read_excel(xls, sheet_name=sheet, header=None)
 
-            # ✅ Skip invalid sheets
             if df.shape[0] < 30:
                 continue
 
             # =========================
-            # HEADER DATA
+            # HEADER
             # =========================
             voucher_type = "Sales E-Invoice"
             vch_no = df.iloc[1, 0]
@@ -69,20 +73,20 @@ def process():
             gstin = df.iloc[10, 1]
 
             # =========================
-            # ADDRESS (3 LINES)
+            # ADDRESS (3 LINE EXACT)
             # =========================
             addr1 = df.iloc[11, 0]
             addr2 = df.iloc[12, 0]
             addr3 = df.iloc[13, 0]
 
             # =========================
-            # CONSIGNEE ADDRESS (FIXED O2 & O3)
+            # CONSIGNEE ADDRESS (NO SHIFT)
             # =========================
             con_addr1 = df.iloc[11, 4]
             con_addr2 = df.iloc[12, 4]
 
             # =========================
-            # DESCRIPTION (B26 onwards)
+            # DESCRIPTION (B26 → till ___)
             # =========================
             descriptions = []
 
@@ -98,11 +102,11 @@ def process():
                 descriptions.append(val)
 
             # =========================
-            # OUTPUT BUILD
+            # BUILD OUTPUT
             # =========================
             rows = []
 
-            # MAIN HEADER ROW
+            # MAIN HEADER ROW (ONLY ONCE)
             rows.append({
                 "Voucher Type": voucher_type,
                 "VCH No / Inv No": vch_no,
@@ -126,15 +130,15 @@ def process():
                 "Is Item Header": "Yes"
             })
 
-            # ADDRESS CONTINUE (J2,J3,J4)
+            # ADDRESS CONTINUE
             rows.append({"Address": addr2})
             rows.append({"Address": addr3})
 
-            # CONSIGNEE CONTINUE (O2,O3)
+            # CONSIGNEE CONTINUE (FIXED)
             rows.append({"Con Address": con_addr2})
 
             # =========================
-            # DESCRIPTION ROWS
+            # DESCRIPTION ROWS (NO GAP)
             # =========================
             for desc in descriptions:
                 rows.append({
@@ -144,7 +148,7 @@ def process():
                 })
 
             # =========================
-            # SAVE FILE
+            # SAVE
             # =========================
             out_df = pd.DataFrame(rows)
 
@@ -171,8 +175,5 @@ def process():
     return send_file(memory_file, download_name='output.zip', as_attachment=True)
 
 
-# =========================
-# RUN
-# =========================
 if __name__ == "__main__":
     app.run(debug=True)
