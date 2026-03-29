@@ -2,8 +2,6 @@ from flask import Flask, request, send_file, render_template_string
 import pandas as pd
 import zipfile
 from io import BytesIO
-
-# 👉 IMPORT MAPPER
 from mapper import process_sheet
 
 app = Flask(__name__)
@@ -11,79 +9,74 @@ app = Flask(__name__)
 uploaded_file = None
 
 # =========================
+# HOME PAGE
+# =========================
+@app.route("/")
+def home():
+    return """
+    <h2>Smart Accounts</h2>
+    <a href="/upload">Go to Upload</a>
+    """
+
+# =========================
 # UPLOAD PAGE
 # =========================
-@app.route('/', methods=['GET', 'POST'])
+@app.route("/upload", methods=["GET", "POST"])
 def upload():
     global uploaded_file
 
-    if request.method == 'POST':
-        file = request.files['file']
-        uploaded_file = BytesIO(file.read())
+    if request.method == "POST":
+        uploaded_file = request.files["file"]
+        return """
+        <h3>File uploaded successfully</h3>
+        <a href="/process">Go to Process</a>
+        """
 
-        xls = pd.ExcelFile(uploaded_file)
-        sheets = xls.sheet_names
-
-        return render_template_string('''
-        <h2>Select Sheets</h2>
-        <form method="POST" action="/process">
-            {% for s in sheets %}
-                <input type="checkbox" name="sheets" value="{{s}}" checked> {{s}}<br>
-            {% endfor %}
-            <br>
-            <button type="submit">Process</button>
-        </form>
-        ''', sheets=sheets)
-
-    return '''
+    return """
     <h2>Upload Excel</h2>
-    <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="file" required>
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required><br><br>
         <button type="submit">Upload</button>
     </form>
-    '''
+    """
 
 # =========================
-# PROCESS
+# PROCESS FILE
 # =========================
-@app.route('/process', methods=['POST'])
+@app.route("/process", methods=["GET"])
 def process():
+
     global uploaded_file
 
-    uploaded_file.seek(0)
-    xls = pd.ExcelFile(uploaded_file)
+    if uploaded_file is None:
+        return "No file uploaded"
 
-    selected_sheets = request.form.getlist('sheets')
-    output_files = []
+    try:
+        # Read Excel
+        df = pd.read_excel(uploaded_file, header=None)
 
-    for sheet in selected_sheets:
-        try:
-            df = pd.read_excel(xls, sheet_name=sheet, header=None)
+        # Process using mapper
+        output_df = process_sheet(df)
 
-            # 👉 CALL MAPPER (ALL LOGIC THERE)
-            out_df = process_sheet(df)
+        # Save to memory
+        output = BytesIO()
 
-            output = BytesIO()
-            out_df.to_excel(output, index=False)
-            output.seek(0)
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            output_df.to_excel(writer, index=False, sheet_name="Output")
 
-            output_files.append((f"{sheet}.xlsx", output))
+        output.seek(0)
 
-        except Exception as e:
-            print("ERROR:", sheet, e)
-            continue
+        return send_file(
+            output,
+            download_name="output.xlsx",
+            as_attachment=True
+        )
 
-    # ZIP OUTPUT
-    memory_file = BytesIO()
+    except Exception as e:
+        return f"<h3>Error:</h3><pre>{str(e)}</pre>"
 
-    with zipfile.ZipFile(memory_file, 'w') as zf:
-        for filename, data in output_files:
-            zf.writestr(filename, data.getvalue())
-
-    memory_file.seek(0)
-
-    return send_file(memory_file, download_name="output.zip", as_attachment=True)
-
-
+# =========================
+# RUN APP
+# =========================
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8080)
