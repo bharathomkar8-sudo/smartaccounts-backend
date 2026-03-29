@@ -8,7 +8,7 @@ app = Flask(__name__)
 uploaded_file = None
 
 # =========================
-# UPLOAD PAGE
+# UPLOAD
 # =========================
 @app.route('/', methods=['GET', 'POST'])
 def upload():
@@ -41,7 +41,7 @@ def upload():
     '''
 
 # =========================
-# PROCESS LOGIC
+# PROCESS
 # =========================
 @app.route('/process', methods=['POST'])
 def process():
@@ -57,9 +57,7 @@ def process():
         try:
             df = pd.read_excel(xls, sheet_name=sheet, header=None)
 
-            # =========================
-            # HEADER DATA
-            # =========================
+            # HEADER
             vch_no = df.iloc[1, 0]
             vch_date = df.iloc[1, 3]
             order_no = df.iloc[1, 4]
@@ -69,14 +67,12 @@ def process():
             party_name = df.iloc[10, 0]
             gstin = df.iloc[10, 1]
 
-            # =========================
-            # ADDRESS (EXACT FORMAT)
-            # =========================
+            # ADDRESS (NO MERGE)
             addr1 = str(df.iloc[11, 0]).strip()
             addr2 = str(df.iloc[12, 0]).strip()
             addr3 = str(df.iloc[13, 0]).strip()
 
-            # extract state & pincode
+            # STATE + PINCODE
             state = ""
             pincode = ""
 
@@ -86,29 +82,24 @@ def process():
                     pincode = parts[1].strip()
                     state = parts[0].split(",")[-1].strip()
 
-            # =========================
-            # DESCRIPTION (STRICT)
-            # =========================
+            # DESCRIPTION (STRICT B26)
             descriptions = []
-
-            for i in range(25, len(df)):  # B26
+            for i in range(25, len(df)):
                 val = str(df.iloc[i, 1]).strip()
 
                 if val == "" or val.lower() == "nan":
                     continue
 
-                # STOP CONDITION (VERY IMPORTANT)
                 if "gst break" in val.lower():
                     break
 
                 descriptions.append(val)
 
-            # =========================
-            # BUILD OUTPUT
-            # =========================
             rows = []
 
-            # FIRST ROW (ONLY FIRST DESCRIPTION)
+            # =========================
+            # ROW 1 (MAIN HEADER)
+            # =========================
             rows.append({
                 "Voucher Type": "Sales E-Invoice",
                 "VCH No / Inv No": vch_no,
@@ -122,36 +113,31 @@ def process():
                 "Address": addr1,
                 "State": state,
                 "Pincode": pincode,
-                "Party GSTIN": gstin,
-                "Consignee Name": party_name,
-                "Con Address": addr1,
-                "Consignee State": state,
-                "Consignee Pincode": pincode,
-                "Con GSTIN": gstin,
-                "Item Name / Code": "Header",
-                "Is Item Header": "Yes"
+                "Party GSTIN": gstin
             })
 
-            # ADDRESS CONTINUE (EXACT FORMAT)
-            rows.append({"Address": addr2})
-            rows.append({"Address": addr3})
+            # =========================
+            # ROW 2 (ADDRESS LINE 2)
+            # =========================
+            rows.append({
+                "Address": addr2
+            })
 
-            # DESCRIPTION CONTINUE (NO REPEAT FIRST)
+            # =========================
+            # ROW 3 (ADDRESS LINE 3)
+            # =========================
+            rows.append({
+                "Address": addr3
+            })
+
+            # =========================
+            # DESCRIPTION CONTINUE (NO REPEAT)
+            # =========================
             for desc in descriptions[1:]:
-
-                # 👉 FORMULA LOGIC LIKE YOUR EXCEL
-                item_code = desc if len(desc.strip()) > 1 else "Header"
-                is_header = "Yes" if item_code == "Header" else ""
-
                 rows.append({
-                    "Description": desc,
-                    "Item Name / Code": item_code,
-                    "Is Item Header": is_header
+                    "Description": desc
                 })
 
-            # =========================
-            # EXPORT
-            # =========================
             out_df = pd.DataFrame(rows)
 
             output = BytesIO()
@@ -161,12 +147,9 @@ def process():
             output_files.append((f"{sheet}.xlsx", output))
 
         except Exception as e:
-            print("ERROR:", sheet, e)
+            print("ERROR:", e)
             continue
 
-    # =========================
-    # ZIP DOWNLOAD
-    # =========================
     memory_file = BytesIO()
 
     with zipfile.ZipFile(memory_file, 'w') as zf:
@@ -175,7 +158,7 @@ def process():
 
     memory_file.seek(0)
 
-    return send_file(memory_file, download_name='output.zip', as_attachment=True)
+    return send_file(memory_file, download_name="output.zip", as_attachment=True)
 
 
 if __name__ == "__main__":
