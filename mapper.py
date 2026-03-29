@@ -1,5 +1,8 @@
 import pandas as pd
 
+# =========================
+# EXACT COLUMN STRUCTURE
+# =========================
 COLUMNS = [
 "Voucher Type","VCH No / Inv No","Description","VCH Date","Order No","Order Date","Other Ref","POS",
 "Party Name","Address","State","Pincode","Party GSTIN",
@@ -10,10 +13,13 @@ COLUMNS = [
 "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
 ]
 
+# =========================
+# MAIN MAPPING FUNCTION
+# =========================
 def process_sheet(df):
 
     # =========================
-    # HEADER
+    # HEADER DATA
     # =========================
     vch_no = df.iloc[1, 0]
     vch_date = df.iloc[1, 3]
@@ -24,14 +30,26 @@ def process_sheet(df):
     party_name = df.iloc[10, 0]
     gstin = df.iloc[10, 1]
 
+    # ADDRESS (STRICT ROW FORMAT)
     addr1 = str(df.iloc[11, 0]).strip()
     addr2 = str(df.iloc[12, 0]).strip()
     addr3 = str(df.iloc[13, 0]).strip()
 
+    # STATE & PINCODE
+    state = ""
+    pincode = ""
+
+    if "–" in addr3:
+        parts = addr3.split("–")
+        if len(parts) == 2:
+            pincode = parts[1].strip()
+            state = parts[0].split(",")[-1].strip()
+
     # =========================
-    # DESCRIPTION
+    # DESCRIPTION (B26 → STOP GST)
     # =========================
     descriptions = []
+
     for i in range(25, len(df)):
         val = str(df.iloc[i, 1]).strip()
 
@@ -46,35 +64,51 @@ def process_sheet(df):
     rows = []
 
     # =========================
-    # HEADER ROW
+    # ROW 1 (MAIN HEADER)
     # =========================
     row = dict.fromkeys(COLUMNS, "")
+
     row["Voucher Type"] = "Sales E-Invoice"
     row["VCH No / Inv No"] = vch_no
-    row["Description"] = descriptions[0]
+    row["Description"] = descriptions[0] if descriptions else ""
     row["VCH Date"] = vch_date
     row["Order No"] = order_no
     row["Order Date"] = order_date
     row["Other Ref"] = other_ref
     row["Party Name"] = party_name
+
     row["Address"] = addr1
+    row["State"] = state
+    row["Pincode"] = pincode
     row["Party GSTIN"] = gstin
+
     row["Consignee Name"] = party_name
     row["Con Address"] = addr1
+    row["Consignee State"] = state
+    row["Consignee Pincode"] = pincode
     row["Con GSTIN"] = gstin
+
     row["Item Name / Code"] = "Header"
     row["Is Item Header"] = "Yes"
-    row["Item header"] = descriptions[0]
+    row["Item header"] = descriptions[0] if descriptions else ""
+
     rows.append(row)
 
     # =========================
-    # ADDRESS CONTINUE
+    # ROW 2 (ADDRESS LINE 2)
     # =========================
     row = dict.fromkeys(COLUMNS, "")
+    row["Description"] = descriptions[1] if len(descriptions) > 1 else ""
     row["Address"] = addr2
     row["Con Address"] = addr2
+    row["Item Name / Code"] = "Header"
+    row["Is Item Header"] = "Yes"
+    row["Item header"] = descriptions[1] if len(descriptions) > 1 else ""
     rows.append(row)
 
+    # =========================
+    # ROW 3 (ADDRESS LINE 3)
+    # =========================
     row = dict.fromkeys(COLUMNS, "")
     row["Address"] = addr3
     row["Con Address"] = addr3
@@ -83,13 +117,19 @@ def process_sheet(df):
     # =========================
     # ITEM ROWS
     # =========================
-    for desc in descriptions[1:]:
+    for desc in descriptions[2:]:
 
         row = dict.fromkeys(COLUMNS, "")
 
         row["Description"] = desc
         row["Item Name / Code"] = desc
         row["Item header"] = desc
+
+        # 👉 DEFAULT VALUES (can improve later)
+        row["Qty"] = 1
+        row["Rate"] = 0
+        row["Taxable Value"] = 0
+        row["Amount"] = 0
 
         rows.append(row)
 
