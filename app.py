@@ -122,17 +122,17 @@ def process():
                     if not match.empty:
                         party_name = match.iloc[0, 1]
 
-                # ADDRESS (3 LINE)
-                addr1 = df.iloc[10, 0]
-                addr2 = df.iloc[11, 0]
-                addr3 = df.iloc[12, 0]
-                address = f"{addr1}, {addr2}, {addr3}"
+                # -------- ADDRESS (3 LINE) --------
+                addr1 = df.iloc[10, 0] if df.shape[0] > 10 else ""
+                addr2 = df.iloc[11, 0] if df.shape[0] > 11 else ""
+                addr3 = df.iloc[12, 0] if df.shape[0] > 12 else ""
 
                 state = df.iloc[14, 1]
                 pincode = df.iloc[15, 1]
 
                 # CONSIGNEE ADDRESS
-                con_address = f"{df.iloc[12,4]} {df.iloc[13,4]}"
+                con_addr1 = df.iloc[12, 4] if df.shape[0] > 12 else ""
+                con_addr2 = df.iloc[13, 4] if df.shape[0] > 13 else ""
 
                 # -------- FIND END ("___") --------
                 start_row = 25
@@ -150,8 +150,6 @@ def process():
                 for i in range(start_row, end_row):
 
                     item = df.iloc[i, 1]
-
-                    # 👉 DO NOT SKIP EMPTY
                     if pd.isna(item):
                         item = ""
 
@@ -162,10 +160,11 @@ def process():
                     except:
                         qty, rate, amount = "", "", ""
 
-                    row = {}
-
+                    # -------- HEADER FIRST ROW --------
                     if first:
-                        row.update({
+
+                        # MAIN HEADER ROW
+                        row = {
                             "Voucher Type": vch_type,
                             "VCH No / Inv No": vch_no,
                             "VCH Date": vch_date,
@@ -174,26 +173,31 @@ def process():
                             "Other Ref": other_ref,
                             "POS": pos,
                             "Party Name": party_name,
-                            "Address": address,
+                            "Address": addr1,
                             "State": state,
                             "Pincode": pincode,
                             "Party GSTIN": gstin,
                             "Consignee Name": party_name,
-                            "Con Address": con_address,
+                            "Con Address": con_addr1,
                             "Consignee State": pos,
                             "Consignee Pincode": pincode,
                             "Con GSTIN": gstin
-                        })
+                        }
+                        rows.append(row)
+
+                        # ADDRESS LINE 2
+                        rows.append({"Address": addr2})
+
+                        # ADDRESS LINE 3
+                        rows.append({"Address": addr3})
+
+                        # CONSIGNEE ADDRESS LINE 2
+                        rows.append({"Con Address": con_addr2})
+
                         first = False
-                    else:
-                        # blank headers next rows
-                        for k in [
-                            "Voucher Type","VCH No / Inv No","VCH Date","Order No","Order Date",
-                            "Other Ref","POS","Party Name","Address","State","Pincode",
-                            "Party GSTIN","Consignee Name","Con Address","Consignee State",
-                            "Consignee Pincode","Con GSTIN"
-                        ]:
-                            row[k] = ""
+
+                    # -------- ITEM ROW --------
+                    row = {}
 
                     row["Description"] = item
                     row["Item Name / Code"] = item
