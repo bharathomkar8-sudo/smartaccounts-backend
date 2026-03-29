@@ -5,7 +5,6 @@ import zipfile
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
-# ✅ MUST BE FIRST
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
@@ -29,9 +28,6 @@ def home():
 def upload():
     file = request.files.get('file')
 
-    if not file:
-        return "No file uploaded"
-
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
@@ -45,13 +41,11 @@ def upload():
     for s in sheets:
         html += f'<input type="checkbox" name="sheets" value="{s}" checked> {s}<br>'
 
-    html += '<br><button type="submit">Process</button>'
-    html += '</form>'
-
+    html += '<button type="submit">Process</button></form>'
     return html
 
 
-# ---------------- FORMAT FUNCTION ----------------
+# ---------------- FORMAT ----------------
 def create_formatted_excel(file_path, rows):
 
     headers = [
@@ -71,13 +65,11 @@ def create_formatted_excel(file_path, rows):
     yellow = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
     bold = Font(bold=True)
 
-    # Header
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=h)
         cell.fill = yellow
         cell.font = bold
 
-    # Data
     for r, row in enumerate(rows, 2):
         for c, h in enumerate(headers, 1):
             ws.cell(row=r, column=c, value=row.get(h, ""))
@@ -92,12 +84,9 @@ def process():
     filepath = request.form.get('filepath')
     selected_sheets = request.form.getlist('sheets')
 
-    if not filepath or not selected_sheets:
-        return "Missing input"
-
     xls = pd.ExcelFile(filepath)
 
-    # GST Master
+    # GST MASTER
     try:
         gst_df = pd.read_excel(xls, sheet_name="GST Details")
         gst_df.iloc[:, 0] = gst_df.iloc[:, 0].astype(str).str.strip().str.upper()
@@ -113,64 +102,72 @@ def process():
 
         for sheet in selected_sheets:
             try:
-                print("Processing:", sheet)
-
                 df = pd.read_excel(xls, sheet_name=sheet, header=None)
 
                 # -------- HEADER --------
                 vch_type = "Sales E-Invoice"
 
-                vch_no = str(df.iloc[10, 16]) if df.shape[0] > 10 else sheet
-                vch_date = df.iloc[11, 16] if df.shape[0] > 11 else ""
-                order_no = df.iloc[19, 1] if df.shape[0] > 19 else ""
-                order_date = df.iloc[20, 1] if df.shape[0] > 20 else ""
-                other_ref = df.iloc[12, 16] if df.shape[0] > 12 else ""
-                pos = df.iloc[14, 5] if df.shape[0] > 14 else ""
+                vch_no = str(df.iloc[10, 16])
+                vch_date = pd.to_datetime(df.iloc[11, 16]).strftime("%d-%m-%Y")
+                order_no = df.iloc[19, 1]
+                order_date = pd.to_datetime(df.iloc[20, 1]).strftime("%d-%m-%Y")
+                other_ref = df.iloc[12, 16]
+                pos = df.iloc[14, 5]
 
-                # GST → Party
-                gstin = str(df.iloc[16, 1]).strip().upper() if df.shape[0] > 16 else ""
+                gstin = str(df.iloc[16, 1]).strip().upper()
+
                 party_name = "UNKNOWN"
-
-                if gst_df is not None and gstin:
+                if gst_df is not None:
                     match = gst_df[gst_df.iloc[:, 0] == gstin]
                     if not match.empty:
                         party_name = match.iloc[0, 1]
 
-                # Address
-                try:
-                    address = f"{df.iloc[11,0]} {df.iloc[12,0]} {df.iloc[13,0]}"
-                except:
-                    address = ""
+                # ADDRESS (3 LINE)
+                addr1 = df.iloc[10, 0]
+                addr2 = df.iloc[11, 0]
+                addr3 = df.iloc[12, 0]
+                address = f"{addr1}, {addr2}, {addr3}"
 
-                state = df.iloc[14, 1] if df.shape[0] > 14 else ""
-                pincode = df.iloc[15, 1] if df.shape[0] > 15 else ""
+                state = df.iloc[14, 1]
+                pincode = df.iloc[15, 1]
 
-                # -------- ITEMS --------
-                rows = []
+                # CONSIGNEE ADDRESS
+                con_address = f"{df.iloc[12,4]} {df.iloc[13,4]}"
+
+                # -------- FIND END ("___") --------
                 start_row = 25
+                end_row = len(df)
 
-                try:
-                    end_row = df[df.apply(
-                        lambda r: r.astype(str).str.contains("GST Break", case=False).any(),
-                        axis=1
-                    )].index[0]
-                except:
-                    end_row = len(df)
+                for i in range(start_row, len(df)):
+                    val = str(df.iloc[i, 1]).strip()
+                    if val.startswith("___"):
+                        end_row = i
+                        break
+
+                rows = []
+                first = True
 
                 for i in range(start_row, end_row):
+
+                    item = df.iloc[i, 1]
+
+                    # 👉 DO NOT SKIP EMPTY
+                    if pd.isna(item):
+                        item = ""
+
                     try:
-                        item = df.iloc[i, 1]
                         qty = df.iloc[i, 5]
                         rate = df.iloc[i, 8]
                         amount = df.iloc[i, 10]
                     except:
-                        continue
+                        qty, rate, amount = "", "", ""
 
-                    if pd.notna(qty) and qty != 0:
-                        rows.append({
+                    row = {}
+
+                    if first:
+                        row.update({
                             "Voucher Type": vch_type,
                             "VCH No / Inv No": vch_no,
-                            "Description": item,
                             "VCH Date": vch_date,
                             "Order No": order_no,
                             "Order Date": order_date,
@@ -181,32 +178,41 @@ def process():
                             "State": state,
                             "Pincode": pincode,
                             "Party GSTIN": gstin,
-                            "Item Name / Code": item,
-                            "Qty": qty,
-                            "Billedqty": qty,
-                            "Rate": rate,
-                            "Taxable Value": amount,
-                            "Amount": amount,
-                            "Sales Ledger": "Sales",
-                            "Item header": item
+                            "Consignee Name": party_name,
+                            "Con Address": con_address,
+                            "Consignee State": pos,
+                            "Consignee Pincode": pincode,
+                            "Con GSTIN": gstin
                         })
+                        first = False
+                    else:
+                        # blank headers next rows
+                        for k in [
+                            "Voucher Type","VCH No / Inv No","VCH Date","Order No","Order Date",
+                            "Other Ref","POS","Party Name","Address","State","Pincode",
+                            "Party GSTIN","Consignee Name","Con Address","Consignee State",
+                            "Consignee Pincode","Con GSTIN"
+                        ]:
+                            row[k] = ""
 
-                # fallback
-                if len(rows) == 0:
-                    rows.append({
-                        "Voucher Type": vch_type,
-                        "VCH No / Inv No": vch_no,
-                        "Party Name": party_name,
-                        "Item header": "No items"
-                    })
+                    row["Description"] = item
+                    row["Item Name / Code"] = item
+                    row["Item header"] = item
 
-                # ✅ UNIQUE FILE (no overwrite issue)
+                    row["Qty"] = qty
+                    row["Billedqty"] = qty
+                    row["Rate"] = rate
+                    row["Taxable Value"] = amount
+                    row["Amount"] = amount
+                    row["Sales Ledger"] = "Sales"
+
+                    rows.append(row)
+
+                # SAVE
                 file_name = f"{sheet}_{os.getpid()}.xlsx"
                 file_path = os.path.join(UPLOAD_FOLDER, file_name)
 
-                # ✅ USE FORMAT FUNCTION
                 create_formatted_excel(file_path, rows)
-
                 zipf.write(file_path, arcname=f"{sheet}.xlsx")
 
             except Exception as e:
