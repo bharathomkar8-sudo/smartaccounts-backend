@@ -1,6 +1,16 @@
 import pandas as pd
 
 # =========================
+# GLOBAL GST DATA (LOADED ONCE)
+# =========================
+party_df = None
+
+def load_gst_sheet(file):
+    global party_df
+    excel_file = pd.ExcelFile(file)
+    party_df = excel_file.parse("GST")
+
+# =========================
 # FINAL OUTPUT COLUMNS
 # =========================
 COLUMNS = [
@@ -34,10 +44,11 @@ def format_date(val):
         return ""
 
 # =========================
-# MAIN FUNCTION
+# MAIN FUNCTION (NO ARG CHANGE)
 # =========================
-def process_sheet(df, party_df):
+def process_sheet(df):
 
+    global party_df
     rows = []
 
     # =========================
@@ -53,19 +64,19 @@ def process_sheet(df, party_df):
 
     state = clean(df.iloc[14, 1])
     pincode = clean(df.iloc[15, 1])
-    gst = clean(df.iloc[16, 1])   # B17
+    gst = clean(df.iloc[16, 1])
 
     # =========================
-    # PARTY NAME (VLOOKUP STYLE + SAFE MATCH)
+    # PARTY NAME (VLOOKUP STYLE)
     # =========================
     party_name = ""
 
-    match = party_df[
-        party_df.iloc[:, 0].astype(str).str.strip() == str(gst).strip()
-    ]
-
-    if not match.empty:
-        party_name = match.iloc[0, 1]
+    if party_df is not None:
+        match = party_df[
+            party_df.iloc[:, 0].astype(str).str.strip() == str(gst).strip()
+        ]
+        if not match.empty:
+            party_name = match.iloc[0, 1]
 
     # =========================
     # ADDRESS
@@ -116,16 +127,12 @@ def process_sheet(df, party_df):
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
 
-        # ✅ PARTY NAME
         row["Party Name"] = party_name
 
         row["Consignee State"] = pos
         row["Consignee Pincode"] = clean(df.iloc[15, 5])
         row["Con GSTIN"] = gst
 
-        # =========================
-        # DESCRIPTION
-        # =========================
         row["Description"] = desc
         row["Item header"] = desc
 
@@ -135,9 +142,6 @@ def process_sheet(df, party_df):
         if i - 25 < len(con_address_lines):
             row["Con Address"] = con_address_lines[i - 25]
 
-        # =========================
-        # ITEM CODE
-        # =========================
         item_val = df.iloc[i, 2]
 
         if isinstance(item_val, (int, float)) and item_val > 1:
@@ -148,9 +152,6 @@ def process_sheet(df, party_df):
         if row["Item Name / Code"] == "Header":
             row["Is Item Header"] = "Yes"
 
-        # =========================
-        # SAFE
-        # =========================
         def safe(val):
             if pd.isna(val):
                 return ""
@@ -161,9 +162,6 @@ def process_sheet(df, party_df):
                 pass
             return val
 
-        # =========================
-        # COLUMN MAPPING
-        # =========================
         row["width"] = safe(df.iloc[i, 3])
         row["Height"] = safe(df.iloc[i, 4])
         row["Qty"] = safe(df.iloc[i, 5])
@@ -172,9 +170,6 @@ def process_sheet(df, party_df):
         row["Rate"] = safe(df.iloc[i, 8])
         row["Dis%"] = safe(df.iloc[i, 9])
 
-        # =========================
-        # CALCULATION
-        # =========================
         try:
             qty = float(row["Qty"]) if row["Qty"] != "" else 0
             rate = float(row["Rate"]) if row["Rate"] != "" else 0
