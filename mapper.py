@@ -126,7 +126,6 @@ def process_sheet(df, gst_df):
         row["Party Name"] = party_name
         row["Consignee Name"] = party_name
 
-        # ✅ FIXED CONSIGNEE (F15, F16)
         row["Consignee State"] = clean(df.iloc[14, 5])
         row["Consignee Pincode"] = clean(df.iloc[15, 5])
         row["Con GSTIN"] = gst
@@ -186,7 +185,7 @@ def process_sheet(df, gst_df):
         row["Dis%"] = safe(df.iloc[i, 9])
 
         # =========================
-        # ✅ UPDATED CALCULATION
+        # CALCULATION (UNCHANGED)
         # =========================
         try:
             billedqty = float(row["Billedqty"]) if row["Billedqty"] != "" else 0
@@ -202,16 +201,34 @@ def process_sheet(df, gst_df):
         row["Amount"] = amount if amount else ""
 
         # =========================
-        # EXISTING GST (UNCHANGED)
+        # ✅ TAX PICKUP (NEW)
         # =========================
-        gst_amt = round(taxable * 0.18, 2)
-        total = taxable + gst_amt
+        cgst_amt = safe(df.iloc[i, 12])   # M
+        sgst_amt = safe(df.iloc[i, 14])   # O
+        igst_amt = safe(df.iloc[i, 16])   # Q
 
-        row["Sales Ledger"] = "GST IGST Sales@18%"
-        row["IGST Ledger"] = "OUTPUT IGST @ 18%"
-        row["IGST Amount"] = gst_amt if gst_amt else ""
+        row["CGST Amt"] = cgst_amt
+        row["SGST Amount"] = sgst_amt
+        row["IGST Amount"] = igst_amt
 
-        row["Invoice Amt"] = total if total else ""
+        # =========================
+        # ROUND OFF (NEW)
+        # =========================
+        row["Round off"] = ""
+
+        # =========================
+        # INVOICE AMT (NEW)
+        # =========================
+        try:
+            amt = float(row["Amount"]) if row["Amount"] != "" else 0
+            cgst = float(cgst_amt) if cgst_amt != "" else 0
+            sgst = float(sgst_amt) if sgst_amt != "" else 0
+            igst = float(igst_amt) if igst_amt != "" else 0
+        except:
+            amt, cgst, sgst, igst = 0, 0, 0, 0
+
+        invoice_total = amt + cgst + sgst + igst
+        row["Invoice Amt"] = invoice_total if invoice_total else ""
 
         rows.append(row)
 
