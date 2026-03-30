@@ -23,7 +23,6 @@ def upload():
     if request.method == 'POST':
         file = request.files['file']
 
-        # ✅ FIX 2: Proper file handling
         uploaded_file = BytesIO(file.read())
         uploaded_file.seek(0)
 
@@ -56,7 +55,6 @@ def upload():
 def process():
     global uploaded_file
 
-    # ✅ FIX 3: Reset pointer before reading again
     uploaded_file.seek(0)
 
     xls = pd.ExcelFile(uploaded_file)
@@ -64,12 +62,26 @@ def process():
     selected_sheets = request.form.getlist('sheets')
     output_files = []
 
+    # ✅ NEW: READ GST SHEET ONCE
+    try:
+        gst_df = pd.read_excel(xls, sheet_name="GST", header=None)
+    except Exception as e:
+        print("GST SHEET ERROR:", e)
+        gst_df = pd.DataFrame()
+
     for sheet in selected_sheets:
         try:
+            # ❌ Skip GST sheet itself
+            if sheet == "GST":
+                continue
+
             df = pd.read_excel(xls, sheet_name=sheet, header=None)
 
-            # 👉 CALL MAPPER
-            out_df = process_sheet(df)
+            # ✅ FIX: PASS gst_df
+            out_df = process_sheet(df, gst_df)
+
+            if out_df is None or out_df.empty:
+                continue
 
             output = BytesIO()
             out_df.to_excel(output, index=False)
@@ -80,6 +92,9 @@ def process():
         except Exception as e:
             print("ERROR:", sheet, e)
             continue
+
+    if not output_files:
+        return "No output generated"
 
     # ZIP OUTPUT
     memory_file = BytesIO()
