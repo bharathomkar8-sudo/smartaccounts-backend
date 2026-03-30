@@ -5,23 +5,42 @@ def clean(val):
         return ""
     return str(val).strip()
 
-# ✅ FIX: accept gst_df also (even if not used now)
+# =========================
+# GET VALUE NEXT TO LABEL
+# =========================
+def get_value_next_to_label(df, row_index, label):
+    try:
+        row = df.iloc[row_index]
+
+        for i in range(len(row)):
+            cell = str(row[i]).strip().lower()
+
+            if label.lower() in cell:
+                val = row[i + 1]
+                if pd.notna(val):
+                    return str(val).strip()
+    except:
+        pass
+
+    return ""
+
+# =========================
+# MAIN FUNCTION
+# =========================
 def process_sheet(df, gst_df=None):
 
     rows = []
 
-    try:
-        # FIXED CELLS
-        consignee_state = clean(df.iloc[14, 5])   # F15
-        consignee_pincode = clean(df.iloc[15, 5]) # F16
-    except:
-        print("❌ Error reading F15/F16")
-        return pd.DataFrame()
+    # ✅ CONSIGNEE FIX (FINAL)
+    consignee_state = get_value_next_to_label(df, 14, "state")
+    consignee_pincode = get_value_next_to_label(df, 15, "pincode")
 
     print("Consignee State:", consignee_state)
     print("Consignee Pincode:", consignee_pincode)
 
+    # =========================
     # LOOP
+    # =========================
     for i in range(25, len(df)):
 
         try:
@@ -40,7 +59,6 @@ def process_sheet(df, gst_df=None):
         if desc.lower() == "end here":
             break
 
-        # READ VALUES
         billedqty = df.iloc[i, 6]
         rate = df.iloc[i, 8]
         dis = df.iloc[i, 9]
@@ -61,11 +79,9 @@ def process_sheet(df, gst_df=None):
         except:
             dis = 0
 
-        # ✅ CORE LOGIC (YOUR REQUIREMENT)
+        # ✅ CALCULATION
         taxable = round(billedqty * rate, 2)
         amount = round(taxable - (taxable * dis / 100), 2)
-
-        print(f"Row {i} → Taxable:{taxable}, Amount:{amount}")
 
         row = {
             "Description": desc,
