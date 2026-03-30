@@ -30,7 +30,7 @@ def format_date(val):
         return ""
 
 # =========================
-# PROCESS FUNCTION (UNCHANGED LOGIC)
+# PROCESS FUNCTION (FIXED)
 # =========================
 def process_sheet(df, party_df):
 
@@ -72,17 +72,17 @@ def process_sheet(df, party_df):
         clean(df.iloc[13, 4])
     ]
 
+    # ✅ FIXED LOOP
     for i in range(25, len(df)):
 
-        desc = df.iloc[i, 1]
+        desc = clean(df.iloc[i, 1])
 
-        if pd.isna(desc):
-            continue
-
-        desc = clean(desc)
-
+        # STOP condition
         if desc == "":
-            continue
+            if i > 30:
+                break
+            else:
+                continue
 
         if desc.lower() == "end here":
             break
@@ -181,13 +181,12 @@ def process_sheet(df, party_df):
     return pd.DataFrame(rows)
 
 # =========================
-# MAIN EXECUTION (NEW PART)
+# MAIN EXECUTION
 # =========================
 def run_full_process(file_path):
 
     excel = pd.ExcelFile(file_path)
 
-    # PARTY SHEET
     party_df = excel.parse("Customer Name & GST")
 
     os.makedirs("output", exist_ok=True)
@@ -203,12 +202,14 @@ def run_full_process(file_path):
 
         output_df = process_sheet(df, party_df)
 
+        print(f"{sheet} → Rows Generated:", len(output_df))  # ✅ debug
+
         if not output_df.empty:
             out_file = f"output/{sheet}.xlsx"
             output_df.to_excel(out_file, index=False)
             created_files.append(out_file)
 
-    # CREATE ZIP
+    # ZIP CREATION
     zip_path = "output.zip"
     with zipfile.ZipFile(zip_path, 'w') as z:
         for file in created_files:
