@@ -36,7 +36,7 @@ def format_date(val):
 # =========================
 # MAIN FUNCTION
 # =========================
-def process_sheet(df):
+def process_sheet(df, party_df):
 
     rows = []
 
@@ -53,7 +53,16 @@ def process_sheet(df):
 
     state = clean(df.iloc[14, 1])
     pincode = clean(df.iloc[15, 1])
-    gst = clean(df.iloc[16, 1])
+    gst = clean(df.iloc[16, 1])   # B17
+
+    # =========================
+    # PARTY NAME (VLOOKUP STYLE)
+    # =========================
+    party_name = ""
+    match = party_df[party_df.iloc[:, 0] == gst]
+
+    if not match.empty:
+        party_name = match.iloc[0, 1]
 
     address_lines = [
         clean(df.iloc[11, 0]),
@@ -100,6 +109,9 @@ def process_sheet(df):
         row["State"] = state
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
+
+        # ✅ PARTY NAME FILLED HERE
+        row["Party Name"] = party_name
 
         row["Consignee State"] = pos
         row["Consignee Pincode"] = clean(df.iloc[15, 5])
@@ -155,8 +167,6 @@ def process_sheet(df):
         row["Extraudf"] = safe(df.iloc[i, 6])
         row["Billedqty"] = safe(df.iloc[i, 6])
         row["Rate"] = safe(df.iloc[i, 8])
-
-        # ✅ NEW: DISCOUNT (COLUMN J)
         row["Dis%"] = safe(df.iloc[i, 9])
 
         # =========================
