@@ -1,4 +1,6 @@
 import pandas as pd
+import os
+import zipfile
 
 # =========================
 # FINAL OUTPUT COLUMNS
@@ -13,9 +15,6 @@ COLUMNS = [
     "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
 ]
 
-# =========================
-# CLEAN FUNCTION
-# =========================
 def clean(val):
     if pd.isna(val):
         return ""
@@ -24,9 +23,6 @@ def clean(val):
         return ""
     return val
 
-# =========================
-# DATE FORMAT FUNCTION
-# =========================
 def format_date(val):
     try:
         return pd.to_datetime(val).strftime("%d-%m-%Y")
@@ -34,15 +30,12 @@ def format_date(val):
         return ""
 
 # =========================
-# MAIN FUNCTION
+# PROCESS FUNCTION (UNCHANGED LOGIC)
 # =========================
 def process_sheet(df, party_df):
 
     rows = []
 
-    # =========================
-    # HEADER VALUES
-    # =========================
     voucher_type = "Sales E-Invoice"
     vch_no = clean(df.iloc[10, 16])
     vch_date = format_date(df.iloc[11, 16])
@@ -55,9 +48,7 @@ def process_sheet(df, party_df):
     pincode = clean(df.iloc[15, 1])
     gst = clean(df.iloc[16, 1])
 
-    # =========================
-    # PARTY NAME LOOKUP
-    # =========================
+    # PARTY LOOKUP
     party_name = ""
     gst_clean = gst.strip()
 
@@ -68,12 +59,8 @@ def process_sheet(df, party_df):
         else:
             vch_no = vch_no + "-ERROR"
 
-    # Consignee = same
     consignee_name = party_name
 
-    # =========================
-    # ADDRESS
-    # =========================
     address_lines = [
         clean(df.iloc[11, 0]),
         clean(df.iloc[12, 0]),
@@ -85,9 +72,6 @@ def process_sheet(df, party_df):
         clean(df.iloc[13, 4])
     ]
 
-    # =========================
-    # LOOP
-    # =========================
     for i in range(25, len(df)):
 
         desc = df.iloc[i, 1]
@@ -105,7 +89,6 @@ def process_sheet(df, party_df):
 
         row = dict.fromkeys(COLUMNS, "")
 
-        # HEADER
         row["Voucher Type"] = voucher_type
         row["VCH No / Inv No"] = vch_no
         row["VCH Date"] = vch_date
@@ -125,18 +108,15 @@ def process_sheet(df, party_df):
         row["Consignee Pincode"] = clean(df.iloc[15, 5])
         row["Con GSTIN"] = gst
 
-        # DESCRIPTION
         row["Description"] = desc
         row["Item header"] = desc
 
-        # ADDRESS FLOW
         if i - 25 < len(address_lines):
             row["Address"] = address_lines[i - 25]
 
         if i - 25 < len(con_address_lines):
             row["Con Address"] = con_address_lines[i - 25]
 
-        # ITEM CODE
         item_val = df.iloc[i, 2]
 
         if isinstance(item_val, (int, float)) and item_val > 1:
@@ -147,7 +127,6 @@ def process_sheet(df, party_df):
         if row["Item Name / Code"] == "Header":
             row["Is Item Header"] = "Yes"
 
-        # SAFE
         def safe(val):
             if pd.isna(val):
                 return ""
@@ -158,7 +137,6 @@ def process_sheet(df, party_df):
                 pass
             return val
 
-        # COLUMNS
         row["width"] = safe(df.iloc[i, 3])
         row["Height"] = safe(df.iloc[i, 4])
         row["Qty"] = safe(df.iloc[i, 5])
@@ -166,9 +144,6 @@ def process_sheet(df, party_df):
         row["Billedqty"] = safe(df.iloc[i, 6])
         row["Rate"] = safe(df.iloc[i, 8])
 
-        # =========================
-        # CALCULATION (UPDATED)
-        # =========================
         try:
             qty = float(row["Qty"]) if row["Qty"] != "" else 0
             rate = float(row["Rate"]) if row["Rate"] != "" else 0
@@ -177,7 +152,6 @@ def process_sheet(df, party_df):
 
         taxable = qty * rate
 
-        # DISCOUNT
         dis_val = df.iloc[i, 9]
         try:
             dis_percent = float(dis_val) if not pd.isna(dis_val) else ""
@@ -205,3 +179,39 @@ def process_sheet(df, party_df):
         rows.append(row)
 
     return pd.DataFrame(rows)
+
+# =========================
+# MAIN EXECUTION (NEW PART)
+# =========================
+def run_full_process(file_path):
+
+    excel = pd.ExcelFile(file_path)
+
+    # PARTY SHEET
+    party_df = excel.parse("Customer Name & GST")
+
+    os.makedirs("output", exist_ok=True)
+
+    created_files = []
+
+    for sheet in excel.sheet_names:
+
+        if sheet == "Customer Name & GST":
+            continue
+
+        df = excel.parse(sheet)
+
+        output_df = process_sheet(df, party_df)
+
+        if not output_df.empty:
+            out_file = f"output/{sheet}.xlsx"
+            output_df.to_excel(out_file, index=False)
+            created_files.append(out_file)
+
+    # CREATE ZIP
+    zip_path = "output.zip"
+    with zipfile.ZipFile(zip_path, 'w') as z:
+        for file in created_files:
+            z.write(file, os.path.basename(file))
+
+    print("✅ Done. ZIP created:", zip_path)
