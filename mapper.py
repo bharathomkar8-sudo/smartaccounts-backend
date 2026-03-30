@@ -5,38 +5,24 @@ def clean(val):
         return ""
     return str(val).strip()
 
-# =========================
-# GET EXACT COLUMN BY EXCEL LETTER
-# =========================
-def get_excel_col(df, col_letter):
-    col_index = ord(col_letter.upper()) - ord('A')
-    return df.iloc[:, col_index]
-
-# =========================
-# MAIN FUNCTION
-# =========================
 def process_sheet(df, gst_df=None):
 
     rows = []
 
     try:
-        # ✅ FORCE COLUMN F
-        col_F = get_excel_col(df, 'F')
-
-        consignee_state = clean(col_F.iloc[14])   # F15
-        consignee_pincode = clean(col_F.iloc[15]) # F16
+        # ✅ DIRECT FIXED POSITION (FINAL)
+        consignee_state = clean(df.iloc[14, 5])   # F15
+        consignee_pincode = clean(df.iloc[15, 5]) # F16
 
     except Exception as e:
-        print("❌ Consignee read error:", e)
+        print("❌ Consignee error:", e)
         consignee_state = ""
         consignee_pincode = ""
 
     print("Consignee State:", consignee_state)
     print("Consignee Pincode:", consignee_pincode)
 
-    # =========================
     # LOOP
-    # =========================
     for i in range(25, len(df)):
 
         try:
@@ -75,7 +61,7 @@ def process_sheet(df, gst_df=None):
         except:
             dis = 0
 
-        # ✅ CALC
+        # CALC
         taxable = round(billedqty * rate, 2)
         amount = round(taxable - (taxable * dis / 100), 2)
 
