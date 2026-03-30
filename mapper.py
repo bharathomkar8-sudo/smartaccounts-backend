@@ -1,27 +1,24 @@
 import pandas as pd
 
 # =========================
-# GLOBAL GST DATA (LOADED ONCE)
+# GLOBAL GST DATA
 # =========================
 party_df = None
 
-def load_gst_sheet(file):
+# =========================
+# LOAD EXCEL + GST
+# =========================
+def load_excel(file):
     global party_df
     excel_file = pd.ExcelFile(file)
-    party_df = excel_file.parse("GST")
 
-# =========================
-# FINAL OUTPUT COLUMNS
-# =========================
-COLUMNS = [
-    "Voucher Type","VCH No / Inv No","Description","VCH Date","Order No","Order Date","Other Ref","POS",
-    "Party Name","Address","State","Pincode","Party GSTIN",
-    "Consignee Name","Con Address","Consignee State","Consignee Pincode","Con GSTIN",
-    "Item Name / Code","Is Item Header","width","Height","Qty","Extraudf","Billedqty","Rate",
-    "Taxable Value","Dis%","Amount","Sales Ledger",
-    "CGST Ledger","CGST Amt","SGST Ledger","SGST Amount",
-    "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
-]
+    # Load GST sheet
+    if "GST" in excel_file.sheet_names:
+        party_df = excel_file.parse("GST")
+    else:
+        party_df = None
+
+    return excel_file
 
 # =========================
 # CLEAN FUNCTION
@@ -35,7 +32,7 @@ def clean(val):
     return val
 
 # =========================
-# DATE FORMAT FUNCTION
+# DATE FORMAT
 # =========================
 def format_date(val):
     try:
@@ -44,27 +41,30 @@ def format_date(val):
         return ""
 
 # =========================
-# MAIN FUNCTION (NO ARG CHANGE)
+# PROCESS SINGLE SHEET
 # =========================
 def process_sheet(df):
 
     global party_df
-    rows = []
 
-    # =========================
-    # HEADER VALUES
-    # =========================
-    voucher_type = "Sales E-Invoice"
-    vch_no = clean(df.iloc[10, 16])     
-    vch_date = format_date(df.iloc[11, 16])
-    order_no = clean(df.iloc[19, 1])
-    order_date = format_date(df.iloc[20, 1])
-    other_ref = clean(df.iloc[12, 16])
-    pos = clean(df.iloc[14, 5])
+    # 🚫 Skip small sheets
+    if len(df) < 20:
+        return None
 
-    state = clean(df.iloc[14, 1])
-    pincode = clean(df.iloc[15, 1])
-    gst = clean(df.iloc[16, 1])
+    try:
+        voucher_type = "Sales E-Invoice"
+        vch_no = clean(df.iloc[10, 16])
+        vch_date = format_date(df.iloc[11, 16])
+        order_no = clean(df.iloc[19, 1])
+        order_date = format_date(df.iloc[20, 1])
+        other_ref = clean(df.iloc[12, 16])
+        pos = clean(df.iloc[14, 5])
+
+        state = clean(df.iloc[14, 1])
+        pincode = clean(df.iloc[15, 1])
+        gst = clean(df.iloc[16, 1])
+    except:
+        return None
 
     # =========================
     # PARTY NAME (VLOOKUP STYLE)
@@ -92,8 +92,10 @@ def process_sheet(df):
         clean(df.iloc[13, 4])
     ]
 
+    rows = []
+
     # =========================
-    # LOOP
+    # LOOP ITEMS
     # =========================
     for i in range(25, len(df)):
 
@@ -104,17 +106,11 @@ def process_sheet(df):
 
         desc = clean(desc)
 
-        if desc == "":
+        if desc == "" or desc.lower() == "end here":
             continue
 
-        if desc.lower() == "end here":
-            break
+        row = {}
 
-        row = dict.fromkeys(COLUMNS, "")
-
-        # =========================
-        # HEADER FILL
-        # =========================
         row["Voucher Type"] = voucher_type
         row["VCH No / Inv No"] = vch_no
         row["VCH Date"] = vch_date
@@ -126,7 +122,6 @@ def process_sheet(df):
         row["State"] = state
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
-
         row["Party Name"] = party_name
 
         row["Consignee State"] = pos
@@ -148,8 +143,6 @@ def process_sheet(df):
             row["Item Name / Code"] = str(int(item_val))
         else:
             row["Item Name / Code"] = "Header"
-
-        if row["Item Name / Code"] == "Header":
             row["Is Item Header"] = "Yes"
 
         def safe(val):
@@ -171,8 +164,8 @@ def process_sheet(df):
         row["Dis%"] = safe(df.iloc[i, 9])
 
         try:
-            qty = float(row["Qty"]) if row["Qty"] != "" else 0
-            rate = float(row["Rate"]) if row["Rate"] != "" else 0
+            qty = float(row["Qty"]) if row["Qty"] else 0
+            rate = float(row["Rate"]) if row["Rate"] else 0
         except:
             qty, rate = 0, 0
 
@@ -192,3 +185,33 @@ def process_sheet(df):
         rows.append(row)
 
     return pd.DataFrame(rows)
+
+
+# =========================
+# PROCESS ALL SHEETS
+# =========================
+def process_file(file):
+
+    excel_file = load_excel(file)
+    final_data = []
+
+    for sheet in excel_file.sheet_names:
+
+        # 🚫 Skip GST & unwanted sheets
+        if sheet.strip().lower() in ["gst", "customer name & gst", "sheet3"]:
+            continue
+
+        df = excel_file.parse(sheet)
+
+        if len(df) < 20:
+            continue
+
+        result = process_sheet(df)
+
+        if result is not None and not result.empty:
+            final_data.append(result)
+
+    if final_data:
+        return pd.concat(final_data, ignore_index=True)
+    else:
+        return pd.DataFrame()
