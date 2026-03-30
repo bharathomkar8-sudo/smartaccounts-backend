@@ -36,9 +36,14 @@ def format_date(val):
 # =========================
 # MAIN FUNCTION
 # =========================
-def process_sheet(df, party_df):
+def process_sheet(df, excel_file=None):
 
     rows = []
+
+    # =========================
+    # LOAD GST SHEET INSIDE
+    # =========================
+    party_df = pd.read_excel(excel_file, sheet_name="GST")
 
     # =========================
     # HEADER VALUES
@@ -56,10 +61,12 @@ def process_sheet(df, party_df):
     gst = clean(df.iloc[16, 1])   # B17
 
     # =========================
-    # PARTY NAME (VLOOKUP STYLE)
+    # PARTY NAME (VLOOKUP STYLE + SAFE FIX)
     # =========================
     party_name = ""
-    match = party_df[party_df.iloc[:, 0] == gst]
+    match = party_df[
+        party_df.iloc[:, 0].astype(str).str.strip() == str(gst).strip()
+    ]
 
     if not match.empty:
         party_name = match.iloc[0, 1]
@@ -110,7 +117,7 @@ def process_sheet(df, party_df):
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
 
-        # ✅ PARTY NAME FILLED HERE
+        # ✅ PARTY NAME
         row["Party Name"] = party_name
 
         row["Consignee State"] = pos
@@ -123,9 +130,6 @@ def process_sheet(df, party_df):
         row["Description"] = desc
         row["Item header"] = desc
 
-        # =========================
-        # ADDRESS FLOW
-        # =========================
         if i - 25 < len(address_lines):
             row["Address"] = address_lines[i - 25]
 
@@ -145,9 +149,6 @@ def process_sheet(df, party_df):
         if row["Item Name / Code"] == "Header":
             row["Is Item Header"] = "Yes"
 
-        # =========================
-        # SAFE
-        # =========================
         def safe(val):
             if pd.isna(val):
                 return ""
