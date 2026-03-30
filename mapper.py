@@ -1,111 +1,24 @@
-import pandas as pd
+# =========================
+# PARTY NAME TEST (VLOOKUP STYLE ONLY)
+# =========================
 
-party_df = None
+party_name = ""
 
-def load_excel(file):
-    global party_df
-    excel_file = pd.ExcelFile(file)
+try:
+    # Load GST sheet directly (temporary test)
+    gst_df = pd.read_excel("testing.xlsx", sheet_name="GST")
 
-    if "GST" in excel_file.sheet_names:
-        party_df = excel_file.parse("GST", header=0)
+    # Exact VLOOKUP match
+    match = gst_df[gst_df.iloc[:, 0] == gst]
+
+    if not match.empty:
+        party_name = match.iloc[0, 1]
     else:
-        party_df = None
-
-    return excel_file
-
-def clean(val):
-    if pd.isna(val):
-        return ""
-    val = str(val)
-    if val.lower() == "nan":
-        return ""
-    return val
-
-def format_date(val):
-    try:
-        return pd.to_datetime(val).strftime("%d-%m-%Y")
-    except:
-        return ""
-
-def process_sheet(df):
-
-    global party_df
-
-    if len(df) < 20:
-        return None
-
-    rows = []
-
-    try:
-        voucher_type = "Sales E-Invoice"
-        vch_no = clean(df.iloc[10, 16])
-        vch_date = format_date(df.iloc[11, 16])
-        gst = clean(df.iloc[16, 1])   # B17
-    except:
-        return None
-
-    # =========================
-    # VLOOKUP (STRICT)
-    # =========================
-    party_name = ""
-
-    try:
-        if party_df is not None:
-            match = party_df[party_df.iloc[:, 0] == gst]
-
-            if not match.empty:
-                party_name = match.iloc[0, 1]
-            else:
-                party_name = ""   # IFERROR
-    except:
         party_name = ""
 
-    for i in range(25, len(df)):
+except Exception as e:
+    print("ERROR IN PARTY LOOKUP:", e)
+    party_name = ""
 
-        desc = df.iloc[i, 1]
-
-        if pd.isna(desc):
-            continue
-
-        desc = clean(desc)
-
-        if desc == "":
-            continue
-
-        row = {}
-
-        row["VCH No / Inv No"] = vch_no
-        row["VCH Date"] = vch_date
-        row["Party GSTIN"] = gst
-        row["Party Name"] = party_name
-        row["Description"] = desc
-
-        rows.append(row)
-
-    return pd.DataFrame(rows)
-
-def process_file(file):
-
-    excel_file = load_excel(file)
-    final_data = []
-
-    for sheet in excel_file.sheet_names:
-
-        # skip GST sheet
-        if sheet.strip().lower() == "gst":
-            continue
-
-        df = excel_file.parse(sheet)
-
-        if len(df) < 20:
-            continue
-
-        result = process_sheet(df)
-
-        if result is not None and not result.empty:
-            final_data.append(result)
-
-    if final_data:
-        return pd.concat(final_data, ignore_index=True)
-    else:
-        return pd.DataFrame()
+print("GST:", gst)
+print("PARTY NAME:", party_name)
