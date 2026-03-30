@@ -1,9 +1,6 @@
 import pandas as pd
 import os
 
-# =========================
-# FINAL OUTPUT COLUMNS
-# =========================
 COLUMNS = [
     "Voucher Type","VCH No / Inv No","Description","VCH Date","Order No","Order Date","Other Ref","POS",
     "Party Name","Address","State","Pincode","Party GSTIN",
@@ -14,81 +11,51 @@ COLUMNS = [
     "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
 ]
 
-# =========================
-# CLEAN FUNCTION
-# =========================
 def clean(val):
     if pd.isna(val):
         return ""
-    val = str(val).strip()
-    if val.lower() == "nan":
-        return ""
-    return val
+    return str(val).strip()
 
-# =========================
-# DATE FORMAT
-# =========================
-def format_date(val):
-    try:
-        return pd.to_datetime(val).strftime("%d-%m-%Y")
-    except:
-        return ""
-
-# =========================
-# MAIN PROCESS FUNCTION
-# =========================
 def process_sheet(df, gst_df):
+
+    print("👉 Sheet Shape:", df.shape)
 
     rows = []
 
-    # =========================
-    # HEADER VALUES
-    # =========================
-    voucher_type = "Sales E-Invoice"
-    vch_no = clean(df.iloc[10, 16])
-    vch_date = format_date(df.iloc[11, 16])
-    order_no = clean(df.iloc[19, 1])
-    order_date = format_date(df.iloc[20, 1])
-    other_ref = clean(df.iloc[12, 16])
-    pos = clean(df.iloc[14, 5])
+    try:
+        vch_no = clean(df.iloc[10,16])
+        print("VCH:", vch_no)
+    except Exception as e:
+        print("❌ Error reading VCH:", e)
+        return pd.DataFrame()
 
-    state = clean(df.iloc[14, 1])
-    pincode = clean(df.iloc[15, 1])
-    gst = clean(df.iloc[16, 1])
+    try:
+        pos = clean(df.iloc[14,5])
+        consignee_state = clean(df.iloc[14,5])   # F15
+        consignee_pincode = clean(df.iloc[15,5]) # F16
+    except Exception as e:
+        print("❌ Consignee error:", e)
+        return pd.DataFrame()
 
-    # =========================
-    # PARTY NAME
-    # =========================
+    try:
+        gst = clean(df.iloc[16,1])
+    except:
+        gst = ""
+
     party_name = ""
     try:
-        match = gst_df[gst_df.iloc[:, 0] == gst]
+        match = gst_df[gst_df.iloc[:,0] == gst]
         if not match.empty:
-            party_name = match.iloc[0, 1]
+            party_name = match.iloc[0,1]
         else:
-            party_name = clean(df.iloc[10, 0])
+            party_name = clean(df.iloc[10,0])
     except:
-        party_name = clean(df.iloc[10, 0])
+        party_name = clean(df.iloc[10,0])
 
-    # =========================
-    # ADDRESS
-    # =========================
-    address_lines = [
-        clean(df.iloc[11, 0]),
-        clean(df.iloc[12, 0]),
-        clean(df.iloc[13, 0])
-    ]
-
-    con_address_lines = [
-        clean(df.iloc[12, 4]),
-        clean(df.iloc[13, 4])
-    ]
-
-    # =========================
-    # ITEM LOOP
-    # =========================
+    # LOOP
     for i in range(25, len(df)):
 
-        desc = df.iloc[i, 1]
+        desc = df.iloc[i,1]
 
         if pd.isna(desc):
             continue
@@ -101,100 +68,63 @@ def process_sheet(df, gst_df):
         if desc.lower() == "end here":
             break
 
+        print(f"Row {i} → {desc}")
+
         row = dict.fromkeys(COLUMNS, "")
 
-        # HEADER
-        row["Voucher Type"] = voucher_type
-        row["VCH No / Inv No"] = vch_no
-        row["VCH Date"] = vch_date
-        row["Order No"] = order_no
-        row["Order Date"] = order_date
-        row["Other Ref"] = other_ref
-        row["POS"] = pos
-
-        row["State"] = state
-        row["Pincode"] = pincode
-        row["Party GSTIN"] = gst
-
-        # PARTY
-        row["Party Name"] = party_name
-        row["Consignee Name"] = party_name
-
-        # ✅ REQUIRED FIX
-        row["Consignee State"] = clean(df.iloc[14, 5])     # F15
-        row["Consignee Pincode"] = clean(df.iloc[15, 5])   # F16
-        row["Con GSTIN"] = gst
-
-        # DESCRIPTION
         row["Description"] = desc
-        row["Item header"] = desc
+        row["Party Name"] = party_name
 
-        # ADDRESS FLOW
-        if i - 25 < len(address_lines):
-            row["Address"] = address_lines[i - 25]
+        # Consignee fix
+        row["Consignee State"] = consignee_state
+        row["Consignee Pincode"] = consignee_pincode
 
-        if i - 25 < len(con_address_lines):
-            row["Con Address"] = con_address_lines[i - 25]
+        # Qty & Rate
+        qty = df.iloc[i,5]
+        rate = df.iloc[i,8]
 
-        # ITEM CODE
-        item_val = df.iloc[i, 2]
-        if isinstance(item_val, (int, float)) and item_val > 1:
-            row["Item Name / Code"] = str(int(item_val))
-        else:
-            row["Item Name / Code"] = "Header"
-            row["Is Item Header"] = "Yes"
-
-        # SAFE FUNCTION
-        def safe(val):
-            if pd.isna(val):
-                return ""
-            try:
-                if float(val) == 0:
-                    return ""
-            except:
-                pass
-            return val
-
-        # COLUMN MAPPING
-        row["width"] = safe(df.iloc[i, 3])
-        row["Height"] = safe(df.iloc[i, 4])
-        row["Qty"] = safe(df.iloc[i, 5])
-        row["Extraudf"] = safe(df.iloc[i, 6])
-        row["Billedqty"] = safe(df.iloc[i, 6])
-        row["Rate"] = safe(df.iloc[i, 8])
-        row["Dis%"] = safe(df.iloc[i, 9])
-
-        # =========================
-        # ✅ TAXABLE VALUE FIX
-        # =========================
         try:
-            qty = float(row["Qty"]) if row["Qty"] != "" else 0
-            rate = float(row["Rate"]) if row["Rate"] != "" else 0
-            taxable = round(qty * rate, 2)
+            qty = float(qty)
         except:
-            taxable = 0
+            qty = 0
 
+        try:
+            rate = float(rate)
+        except:
+            rate = 0
+
+        taxable = round(qty * rate, 2)
+
+        print("   Qty:", qty, "Rate:", rate, "Taxable:", taxable)
+
+        row["Qty"] = qty if qty else ""
+        row["Rate"] = rate if rate else ""
         row["Taxable Value"] = taxable if taxable else ""
         row["Amount"] = taxable if taxable else ""
 
         rows.append(row)
 
+    print("✅ Total Rows Created:", len(rows))
+
     return pd.DataFrame(rows)
 
+
 # =========================
-# TEST RUN
+# RUN
 # =========================
 if __name__ == "__main__":
 
     input_file = "input.xlsx"
     gst_file = "gst.xlsx"
 
+    print("Starting...")
+
     if not os.path.exists(input_file):
-        print("❌ input.xlsx not found")
+        print("❌ input.xlsx NOT FOUND")
         exit()
 
     if not os.path.exists(gst_file):
-        print("❌ gst.xlsx not found")
+        print("❌ gst.xlsx NOT FOUND")
         exit()
 
     xls = pd.ExcelFile(input_file)
@@ -203,17 +133,18 @@ if __name__ == "__main__":
     os.makedirs("output", exist_ok=True)
 
     for sheet in xls.sheet_names:
-        print(f"Processing: {sheet}")
+        print("\n======================")
+        print("Processing:", sheet)
 
         df = pd.read_excel(xls, sheet_name=sheet)
 
         output_df = process_sheet(df, gst_df)
 
         if not output_df.empty:
-            output_path = f"output/{sheet}.xlsx"
-            output_df.to_excel(output_path, index=False)
-            print(f"✅ Saved: {output_path}")
+            path = f"output/{sheet}.xlsx"
+            output_df.to_excel(path, index=False)
+            print("✅ Saved:", path)
         else:
-            print(f"⚠️ No data in {sheet}")
+            print("⚠️ No output generated")
 
-    print("\n🎯 DONE")
+    print("\nDONE")
