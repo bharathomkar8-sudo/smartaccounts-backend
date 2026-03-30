@@ -1,34 +1,96 @@
 import pandas as pd
 
+# =========================
+# FINAL OUTPUT COLUMNS
+# =========================
+COLUMNS = [
+    "Voucher Type","VCH No / Inv No","Description","VCH Date","Order No","Order Date","Other Ref","POS",
+    "Party Name","Address","State","Pincode","Party GSTIN",
+    "Consignee Name","Con Address","Consignee State","Consignee Pincode","Con GSTIN",
+    "Item Name / Code","Is Item Header","width","Height","Qty","Extraudf","Billedqty","Rate",
+    "Taxable Value","Dis%","Amount","Sales Ledger",
+    "CGST Ledger","CGST Amt","SGST Ledger","SGST Amount",
+    "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
+]
+
+# =========================
+# CLEAN FUNCTION
+# =========================
 def clean(val):
     if pd.isna(val):
         return ""
-    return str(val).strip()
+    val = str(val).strip()
+    if val.lower() == "nan":
+        return ""
+    return val
 
-def process_sheet(df, gst_df=None):
+# =========================
+# DATE FORMAT FUNCTION
+# =========================
+def format_date(val):
+    try:
+        return pd.to_datetime(val).strftime("%d-%m-%Y")
+    except:
+        return ""
+
+# =========================
+# MAIN FUNCTION
+# =========================
+def process_sheet(df, gst_df):
 
     rows = []
 
+    # =========================
+    # HEADER VALUES
+    # =========================
+    voucher_type = "Sales E-Invoice"
+    vch_no = clean(df.iloc[10, 16])     
+    vch_date = format_date(df.iloc[11, 16])
+    order_no = clean(df.iloc[19, 1])
+    order_date = format_date(df.iloc[20, 1])
+    other_ref = clean(df.iloc[12, 16])
+    pos = clean(df.iloc[14, 5])
+
+    state = clean(df.iloc[14, 1])
+    pincode = clean(df.iloc[15, 1])
+    gst = clean(df.iloc[16, 1])
+
+    # =========================
+    # PARTY NAME LOGIC
+    # =========================
+    party_name = ""
+
     try:
-        # ✅ DIRECT FIXED POSITION (FINAL)
-        consignee_state = clean(df.iloc[14, 5])   # F15
-        consignee_pincode = clean(df.iloc[15, 5]) # F16
+        match = gst_df[gst_df.iloc[:, 0] == gst]
 
-    except Exception as e:
-        print("❌ Consignee error:", e)
-        consignee_state = ""
-        consignee_pincode = ""
+        if not match.empty:
+            party_name = match.iloc[0, 1]
+        else:
+            party_name = clean(df.iloc[10, 0])
 
-    print("Consignee State:", consignee_state)
-    print("Consignee Pincode:", consignee_pincode)
+    except:
+        party_name = clean(df.iloc[10, 0])
 
+    # =========================
+    # ADDRESS
+    # =========================
+    address_lines = [
+        clean(df.iloc[11, 0]),
+        clean(df.iloc[12, 0]),
+        clean(df.iloc[13, 0])
+    ]
+
+    con_address_lines = [
+        clean(df.iloc[12, 4]),
+        clean(df.iloc[13, 4])
+    ]
+
+    # =========================
     # LOOP
+    # =========================
     for i in range(25, len(df)):
 
-        try:
-            desc = df.iloc[i, 1]
-        except:
-            continue
+        desc = df.iloc[i, 1]
 
         if pd.isna(desc):
             continue
@@ -41,43 +103,116 @@ def process_sheet(df, gst_df=None):
         if desc.lower() == "end here":
             break
 
-        billedqty = df.iloc[i, 6]
-        rate = df.iloc[i, 8]
-        dis = df.iloc[i, 9]
+        row = dict.fromkeys(COLUMNS, "")
 
+        # =========================
+        # HEADER FILL
+        # =========================
+        row["Voucher Type"] = voucher_type
+        row["VCH No / Inv No"] = vch_no
+        row["VCH Date"] = vch_date
+        row["Order No"] = order_no
+        row["Order Date"] = order_date
+        row["Other Ref"] = other_ref
+        row["POS"] = pos
+
+        row["State"] = state
+        row["Pincode"] = pincode
+        row["Party GSTIN"] = gst
+
+        # =========================
+        # PARTY + CONSIGNEE
+        # =========================
+        row["Party Name"] = party_name
+        row["Consignee Name"] = party_name
+
+        # ✅ FIXED CONSIGNEE (F15, F16)
+        row["Consignee State"] = clean(df.iloc[14, 5])
+        row["Consignee Pincode"] = clean(df.iloc[15, 5])
+        row["Con GSTIN"] = gst
+
+        # =========================
+        # DESCRIPTION
+        # =========================
+        row["Description"] = desc
+        row["Item header"] = desc
+
+        # =========================
+        # ADDRESS FLOW
+        # =========================
+        if i - 25 < len(address_lines):
+            row["Address"] = address_lines[i - 25]
+
+        if i - 25 < len(con_address_lines):
+            row["Con Address"] = con_address_lines[i - 25]
+
+        # =========================
+        # ITEM CODE
+        # =========================
+        item_val = df.iloc[i, 2]
+
+        if isinstance(item_val, (int, float)) and item_val > 1:
+            row["Item Name / Code"] = str(int(item_val))
+        else:
+            row["Item Name / Code"] = "Header"
+
+        if row["Item Name / Code"] == "Header":
+            row["Is Item Header"] = "Yes"
+
+        # =========================
         # SAFE
-        try:
-            billedqty = float(billedqty)
-        except:
-            billedqty = 0
+        # =========================
+        def safe(val):
+            if pd.isna(val):
+                return ""
+            try:
+                if float(val) == 0:
+                    return ""
+            except:
+                pass
+            return val
 
-        try:
-            rate = float(rate)
-        except:
-            rate = 0
+        # =========================
+        # COLUMN MAPPING
+        # =========================
+        row["width"] = safe(df.iloc[i, 3])
+        row["Height"] = safe(df.iloc[i, 4])
+        row["Qty"] = safe(df.iloc[i, 5])
+        row["Extraudf"] = safe(df.iloc[i, 6])
+        row["Billedqty"] = safe(df.iloc[i, 6])
+        row["Rate"] = safe(df.iloc[i, 8])
 
-        try:
-            dis = float(dis)
-        except:
-            dis = 0
+        # DISCOUNT
+        row["Dis%"] = safe(df.iloc[i, 9])
 
-        # CALC
+        # =========================
+        # ✅ UPDATED CALCULATION
+        # =========================
+        try:
+            billedqty = float(row["Billedqty"]) if row["Billedqty"] != "" else 0
+            rate = float(row["Rate"]) if row["Rate"] != "" else 0
+            dis = float(row["Dis%"]) if row["Dis%"] != "" else 0
+        except:
+            billedqty, rate, dis = 0, 0, 0
+
         taxable = round(billedqty * rate, 2)
         amount = round(taxable - (taxable * dis / 100), 2)
 
-        row = {
-            "Description": desc,
-            "Consignee State": consignee_state,
-            "Consignee Pincode": consignee_pincode,
-            "Billedqty": billedqty,
-            "Rate": rate,
-            "Dis%": dis,
-            "Taxable Value": taxable,
-            "Amount": amount
-        }
+        row["Taxable Value"] = taxable if taxable else ""
+        row["Amount"] = amount if amount else ""
+
+        # =========================
+        # EXISTING GST (UNCHANGED)
+        # =========================
+        gst_amt = round(taxable * 0.18, 2)
+        total = taxable + gst_amt
+
+        row["Sales Ledger"] = "GST IGST Sales@18%"
+        row["IGST Ledger"] = "OUTPUT IGST @ 18%"
+        row["IGST Amount"] = gst_amt if gst_amt else ""
+
+        row["Invoice Amt"] = total if total else ""
 
         rows.append(row)
-
-    print("✅ Rows created:", len(rows))
 
     return pd.DataFrame(rows)
