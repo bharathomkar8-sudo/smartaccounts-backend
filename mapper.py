@@ -36,24 +36,9 @@ def format_date(val):
 # =========================
 # MAIN FUNCTION
 # =========================
-def process_sheet(df, party_df):
+def process_sheet(df):
 
     rows = []
-
-    # ==========================================
-    # RELIABLE PARTY LOOKUP DICTIONARY
-    # ==========================================
-    party_map = {}
-    
-    # Starting from index 1 (Row 2 in Excel) to skip headers
-    for i in range(0, len(party_df)):
-        raw_gst = clean(party_df.iloc[i, 0])
-        # Force uppercase and remove ALL spaces for a perfect match
-        gst_key = raw_gst.upper().replace(" ", "")
-        name_val = clean(party_df.iloc[i, 1])
-
-        if gst_key != "":
-            party_map[gst_key] = name_val
 
     # =========================
     # HEADER VALUES
@@ -68,17 +53,7 @@ def process_sheet(df, party_df):
 
     state = clean(df.iloc[14, 1])
     pincode = clean(df.iloc[15, 1])
-    
-    # Clean the GST from the main sheet for matching
-    raw_gst_main = clean(df.iloc[16, 1])
-    gst = raw_gst_main.upper().replace(" ", "")
-
-    # ==========================================
-    # LOOKUP PARTY NAME (The Reliability Fix)
-    # ==========================================
-    # Using .get() ensures that if the GST isn't found, 
-    # it uses the original GST string as the name so the file doesn't crash.
-    party_name = party_map.get(gst, raw_gst_main) 
+    gst = clean(df.iloc[16, 1])
 
     address_lines = [
         clean(df.iloc[11, 0]),
@@ -97,11 +72,15 @@ def process_sheet(df, party_df):
     for i in range(25, len(df)):
 
         desc = df.iloc[i, 1]
+
         if pd.isna(desc):
             continue
+
         desc = clean(desc)
+
         if desc == "":
             continue
+
         if desc.lower() == "end here":
             break
 
@@ -120,19 +99,21 @@ def process_sheet(df, party_df):
 
         row["State"] = state
         row["Pincode"] = pincode
-        row["Party GSTIN"] = raw_gst_main # Original format
-
-        # ✅ Fill the matched name
-        row["Party Name"] = party_name
-        row["Consignee Name"] = party_name
+        row["Party GSTIN"] = gst
 
         row["Consignee State"] = pos
         row["Consignee Pincode"] = clean(df.iloc[15, 5])
-        row["Con GSTIN"] = raw_gst_main
+        row["Con GSTIN"] = gst
 
+        # =========================
+        # DESCRIPTION
+        # =========================
         row["Description"] = desc
         row["Item header"] = desc
 
+        # =========================
+        # ADDRESS FLOW
+        # =========================
         if i - 25 < len(address_lines):
             row["Address"] = address_lines[i - 25]
 
@@ -143,6 +124,7 @@ def process_sheet(df, party_df):
         # ITEM CODE
         # =========================
         item_val = df.iloc[i, 2]
+
         if isinstance(item_val, (int, float)) and item_val > 1:
             row["Item Name / Code"] = str(int(item_val))
         else:
@@ -151,6 +133,9 @@ def process_sheet(df, party_df):
         if row["Item Name / Code"] == "Header":
             row["Is Item Header"] = "Yes"
 
+        # =========================
+        # SAFE
+        # =========================
         def safe(val):
             if pd.isna(val):
                 return ""
@@ -170,6 +155,8 @@ def process_sheet(df, party_df):
         row["Extraudf"] = safe(df.iloc[i, 6])
         row["Billedqty"] = safe(df.iloc[i, 6])
         row["Rate"] = safe(df.iloc[i, 8])
+
+        # ✅ NEW: DISCOUNT (COLUMN J)
         row["Dis%"] = safe(df.iloc[i, 9])
 
         # =========================
