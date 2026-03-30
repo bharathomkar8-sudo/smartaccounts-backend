@@ -34,16 +34,17 @@ def format_date(val):
         return ""
 
 # =========================
-# MAIN FUNCTION (UPDATED)
+# MAIN FUNCTION
 # =========================
-def process_sheet(df, party_df):
+def process_sheet(df, party_df):   # ✅ added party_df
 
     rows = []
 
     # =========================
-    # PARTY LOOKUP DICT (NEW)
+    # PARTY LOOKUP DICTIONARY (NEW)
     # =========================
     party_map = {}
+
     for i in range(1, len(party_df)):
         gst_key = clean(party_df.iloc[i, 0])
         name_val = clean(party_df.iloc[i, 1])
@@ -67,17 +68,14 @@ def process_sheet(df, party_df):
     gst = clean(df.iloc[16, 1])
 
     # =========================
-    # PARTY NAME LOOKUP (NEW)
+    # PARTY NAME LOGIC (NEW)
     # =========================
     gst_key = gst.strip()
-    party_name = ""
-    error_flag = False
 
     if gst_key in party_map:
         party_name = party_map[gst_key]
     else:
-        party_name = ""
-        error_flag = True
+        party_name = "NOT FOUND"
 
     # =========================
     # ADDRESS
@@ -117,13 +115,7 @@ def process_sheet(df, party_df):
         # HEADER FILL
         # =========================
         row["Voucher Type"] = voucher_type
-
-        # ✅ ERROR HANDLING
-        if error_flag:
-            row["VCH No / Inv No"] = vch_no + "-ERROR"
-        else:
-            row["VCH No / Inv No"] = vch_no
-
+        row["VCH No / Inv No"] = vch_no
         row["VCH Date"] = vch_date
         row["Order No"] = order_no
         row["Order Date"] = order_date
@@ -134,7 +126,7 @@ def process_sheet(df, party_df):
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
 
-        # ✅ PARTY + CONSIGNEE (NEW)
+        # ✅ NEW PARTY + CONSIGNEE
         row["Party Name"] = party_name
         row["Consignee Name"] = party_name
 
