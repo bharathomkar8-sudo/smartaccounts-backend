@@ -13,100 +13,124 @@ COLUMNS = [
     "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
 ]
 
+# =========================
+# MAIN FUNCTION
+# =========================
 def process_sheet(df):
 
     rows = []
 
     # =========================
-    # HEADER MAPPING (AS PER YOUR EXCEL)
+    # HEADER VALUES (FIXED CELLS)
     # =========================
-    header = dict.fromkeys(COLUMNS, "")
+    voucher_type = "Sales E-Invoice"
+    vch_no = str(df.iloc[10, 16])     # Q11
+    vch_date = df.iloc[11, 16]        # Q12
+    order_no = str(df.iloc[19, 1])    # B20
+    order_date = df.iloc[20, 1]       # B21
+    other_ref = str(df.iloc[12, 16])  # Q13
+    pos = str(df.iloc[14, 5])         # F15
 
-    header["Voucher Type"] = "Sales E-Invoice"
-    header["VCH No / Inv No"] = str(df.iloc[10, 16])   # Q11
+    state = str(df.iloc[14, 1])       # B15
+    pincode = str(df.iloc[15, 1])     # B16
+    gst = str(df.iloc[16, 1])         # B17
 
-    header["VCH Date"] = str(df.iloc[11, 16])          # Q12
-    header["Order No"] = str(df.iloc[19, 1])           # B20
-    header["Order Date"] = str(df.iloc[20, 1])         # B21
-    header["Other Ref"] = str(df.iloc[12, 16])         # Q13
-    header["POS"] = str(df.iloc[14, 5])                # F15
+    # ADDRESS (LINE BY LINE — NOT COMBINED)
+    address_lines = [
+        str(df.iloc[11, 0]),  # A12
+        str(df.iloc[12, 0]),  # A13
+        str(df.iloc[13, 0])   # A14
+    ]
 
-    # ADDRESS (A12:A14 → combined)
-    addr1 = str(df.iloc[11, 0])
-    addr2 = str(df.iloc[12, 0])
-    addr3 = str(df.iloc[13, 0])
-    full_address = ", ".join([x for x in [addr1, addr2, addr3] if x and x != "nan"])
-
-    header["Address"] = full_address
-
-    header["State"] = str(df.iloc[14, 1])              # B15
-    header["Pincode"] = str(df.iloc[15, 1])            # B16
-    header["Party GSTIN"] = str(df.iloc[16, 1])        # B17
-
-    # CONSIGNEE
-    con1 = str(df.iloc[12, 4])
-    con2 = str(df.iloc[13, 4])
-    con_address = ", ".join([x for x in [con1, con2] if x and x != "nan"])
-
-    header["Consignee Name"] = header["Party Name"]
-    header["Con Address"] = con_address
-    header["Consignee State"] = str(df.iloc[14, 5])
-    header["Consignee Pincode"] = str(df.iloc[15, 5])
-    header["Con GSTIN"] = str(df.iloc[16, 1])
-
-    header["Item Name / Code"] = "Header"
-    header["Is Item Header"] = "Yes"
-    header["Item header"] = str(df.iloc[25, 2])
-
-    rows.append(header)
+    # CONSIGNEE ADDRESS (LINE BY LINE)
+    con_address_lines = [
+        str(df.iloc[12, 4]),  # E13
+        str(df.iloc[13, 4])   # E14
+    ]
 
     # =========================
-    # ITEM MAPPING (START B26)
+    # LOOP FROM ROW 26
     # =========================
     for i in range(25, len(df)):
 
-        desc = df.iloc[i, 2]
+        desc = df.iloc[i, 1]   # B column
 
+        # STOP CONDITION
         if pd.isna(desc):
-            break
+            continue
 
         desc = str(desc).strip()
+
+        if desc.lower() == "end here":
+            break
 
         row = dict.fromkeys(COLUMNS, "")
 
         # =========================
-        # ITEM NAME / HEADER LOGIC
+        # BASIC HEADER FILL
         # =========================
-        try:
-            item_code = df.iloc[i, 2]
-            if isinstance(item_code, (int, float)) and item_code > 1:
-                row["Item Name / Code"] = str(int(item_code))
-            else:
-                row["Item Name / Code"] = "Header"
-        except:
-            row["Item Name / Code"] = "Header"
+        row["Voucher Type"] = voucher_type
+        row["VCH No / Inv No"] = vch_no
+        row["VCH Date"] = vch_date
+        row["Order No"] = order_no
+        row["Order Date"] = order_date
+        row["Other Ref"] = other_ref
+        row["POS"] = pos
 
-        if row["Item Name / Code"] == "Header":
-            row["Is Item Header"] = "Yes"
+        row["State"] = state
+        row["Pincode"] = pincode
+        row["Party GSTIN"] = gst
+
+        row["Consignee State"] = pos
+        row["Consignee Pincode"] = str(df.iloc[15, 5])  # F16
+        row["Con GSTIN"] = gst
 
         # =========================
-        # BASIC
+        # DESCRIPTION
         # =========================
         row["Description"] = desc
         row["Item header"] = desc
 
         # =========================
-        # VALUE MAPPING (AS PER YOUR FORMULA)
+        # ADDRESS FLOW (LINE BY LINE)
+        # =========================
+        if i - 25 < len(address_lines):
+            row["Address"] = address_lines[i - 25]
+
+        if i - 25 < len(con_address_lines):
+            row["Con Address"] = con_address_lines[i - 25]
+
+        # =========================
+        # ITEM CODE LOGIC (COLUMN C)
+        # =========================
+        item_val = df.iloc[i, 2]
+
+        if isinstance(item_val, (int, float)) and item_val > 1:
+            row["Item Name / Code"] = str(int(item_val))
+        else:
+            row["Item Name / Code"] = "Header"
+
+        # IS HEADER
+        if row["Item Name / Code"] == "Header":
+            row["Is Item Header"] = "Yes"
+
+        # =========================
+        # SAFE VALUE FUNCTION
         # =========================
         def safe(val):
-            return "" if pd.isna(val) or val == 0 else val
+            if pd.isna(val) or val == 0:
+                return ""
+            return val
 
-        row["width"] = safe(df.iloc[i, 3])     # D
-        row["Height"] = safe(df.iloc[i, 4])    # E
-        row["Qty"] = safe(df.iloc[i, 5])       # F
-        row["Extraudf"] = safe(df.iloc[i, 6])  # G
-        row["Billedqty"] = safe(df.iloc[i, 6]) # G
-        row["Rate"] = safe(df.iloc[i, 8])      # I
+        # =========================
+        # COLUMN MAPPING
+        # =========================
+        row["width"] = safe(df.iloc[i, 3])      # D
+        row["Height"] = safe(df.iloc[i, 4])     # E
+        row["Qty"] = safe(df.iloc[i, 5])        # F
+        row["Extraudf"] = safe(df.iloc[i, 6])   # G
+        row["Billedqty"] = safe(df.iloc[i, 6])  # G
+        row["Rate"] = safe(df.iloc[i, 8])       # I
 
         # =========================
         # CALCULATION
@@ -118,15 +142,15 @@ def process_sheet(df):
             qty, rate = 0, 0
 
         taxable = qty * rate
-        gst = round(taxable * 0.18, 2)
-        total = taxable + gst
+        gst_amt = round(taxable * 0.18, 2)
+        total = taxable + gst_amt
 
         row["Taxable Value"] = taxable if taxable else ""
         row["Amount"] = taxable if taxable else ""
 
         row["Sales Ledger"] = "GST IGST Sales@18%"
         row["IGST Ledger"] = "OUTPUT IGST @ 18%"
-        row["IGST Amount"] = gst if gst else ""
+        row["IGST Amount"] = gst_amt if gst_amt else ""
 
         row["Invoice Amt"] = total if total else ""
 
