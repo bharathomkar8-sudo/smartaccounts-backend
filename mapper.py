@@ -6,10 +6,12 @@ def clean(val):
     return str(val).strip()
 
 # =========================
-# GET VALUE NEXT TO LABEL
+# GET EXACT COLUMN BY EXCEL LETTER
 # =========================
-consignee_state = get_value_next_to_label_right(df, 14, "state")
-consignee_pincode = get_value_next_to_label_right(df, 15, "pincode")
+def get_excel_col(df, col_letter):
+    col_index = ord(col_letter.upper()) - ord('A')
+    return df.iloc[:, col_index]
+
 # =========================
 # MAIN FUNCTION
 # =========================
@@ -17,9 +19,17 @@ def process_sheet(df, gst_df=None):
 
     rows = []
 
-    # ✅ CONSIGNEE FIX (FINAL)
-    consignee_state = get_value_next_to_label(df, 14, "state")
-    consignee_pincode = get_value_next_to_label(df, 15, "pincode")
+    try:
+        # ✅ FORCE COLUMN F
+        col_F = get_excel_col(df, 'F')
+
+        consignee_state = clean(col_F.iloc[14])   # F15
+        consignee_pincode = clean(col_F.iloc[15]) # F16
+
+    except Exception as e:
+        print("❌ Consignee read error:", e)
+        consignee_state = ""
+        consignee_pincode = ""
 
     print("Consignee State:", consignee_state)
     print("Consignee Pincode:", consignee_pincode)
@@ -49,7 +59,7 @@ def process_sheet(df, gst_df=None):
         rate = df.iloc[i, 8]
         dis = df.iloc[i, 9]
 
-        # SAFE CONVERT
+        # SAFE
         try:
             billedqty = float(billedqty)
         except:
@@ -65,7 +75,7 @@ def process_sheet(df, gst_df=None):
         except:
             dis = 0
 
-        # ✅ CALCULATION
+        # ✅ CALC
         taxable = round(billedqty * rate, 2)
         amount = round(taxable - (taxable * dis / 100), 2)
 
