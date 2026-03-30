@@ -1,18 +1,22 @@
 import pandas as pd
-import os
 
 def clean(val):
     if pd.isna(val):
         return ""
     return str(val).strip()
 
-def process_sheet(df):
+# ✅ FIX: accept gst_df also (even if not used now)
+def process_sheet(df, gst_df=None):
 
     rows = []
 
-    # ✅ FIXED CELLS
-    consignee_state = clean(df.iloc[14, 5])   # F15
-    consignee_pincode = clean(df.iloc[15, 5]) # F16
+    try:
+        # FIXED CELLS
+        consignee_state = clean(df.iloc[14, 5])   # F15
+        consignee_pincode = clean(df.iloc[15, 5]) # F16
+    except:
+        print("❌ Error reading F15/F16")
+        return pd.DataFrame()
 
     print("Consignee State:", consignee_state)
     print("Consignee Pincode:", consignee_pincode)
@@ -20,7 +24,10 @@ def process_sheet(df):
     # LOOP
     for i in range(25, len(df)):
 
-        desc = df.iloc[i, 1]
+        try:
+            desc = df.iloc[i, 1]
+        except:
+            continue
 
         if pd.isna(desc):
             continue
@@ -33,6 +40,7 @@ def process_sheet(df):
         if desc.lower() == "end here":
             break
 
+        # READ VALUES
         billedqty = df.iloc[i, 6]
         rate = df.iloc[i, 8]
         dis = df.iloc[i, 9]
@@ -53,12 +61,11 @@ def process_sheet(df):
         except:
             dis = 0
 
-        # ✅ CORE LOGIC
+        # ✅ CORE LOGIC (YOUR REQUIREMENT)
         taxable = round(billedqty * rate, 2)
         amount = round(taxable - (taxable * dis / 100), 2)
 
-        print(f"Row {i} → BQty:{billedqty}, Rate:{rate}, Dis:{dis}")
-        print(f"   Taxable:{taxable}, Amount:{amount}")
+        print(f"Row {i} → Taxable:{taxable}, Amount:{amount}")
 
         row = {
             "Description": desc,
@@ -73,36 +80,6 @@ def process_sheet(df):
 
         rows.append(row)
 
+    print("✅ Rows created:", len(rows))
+
     return pd.DataFrame(rows)
-
-
-# =========================
-# RUN TEST
-# =========================
-if __name__ == "__main__":
-
-    file = "input.xlsx"
-
-    if not os.path.exists(file):
-        print("❌ input.xlsx not found")
-        exit()
-
-    xls = pd.ExcelFile(file)
-
-    os.makedirs("output", exist_ok=True)
-
-    for sheet in xls.sheet_names:
-        print("\nProcessing:", sheet)
-
-        df = pd.read_excel(xls, sheet_name=sheet)
-
-        out = process_sheet(df)
-
-        if not out.empty:
-            path = f"output/{sheet}.xlsx"
-            out.to_excel(path, index=False)
-            print("✅ Saved:", path)
-        else:
-            print("⚠️ No data")
-
-    print("\nDONE")
