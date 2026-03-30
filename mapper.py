@@ -36,21 +36,9 @@ def format_date(val):
 # =========================
 # MAIN FUNCTION
 # =========================
-def process_sheet(df, party_df):   # ✅ added party_df
+def process_sheet(df):
 
     rows = []
-
-    # =========================
-    # PARTY LOOKUP DICTIONARY (NEW)
-    # =========================
-    party_map = {}
-
-    for i in range(1, len(party_df)):
-        gst_key = clean(party_df.iloc[i, 0])
-        name_val = clean(party_df.iloc[i, 1])
-
-        if gst_key != "":
-            party_map[gst_key] = name_val
 
     # =========================
     # HEADER VALUES
@@ -67,19 +55,6 @@ def process_sheet(df, party_df):   # ✅ added party_df
     pincode = clean(df.iloc[15, 1])
     gst = clean(df.iloc[16, 1])
 
-    # =========================
-    # PARTY NAME LOGIC (NEW)
-    # =========================
-    gst_key = gst.strip()
-
-    if gst_key in party_map:
-        party_name = party_map[gst_key]
-    else:
-        party_name = "NOT FOUND"
-
-    # =========================
-    # ADDRESS
-    # =========================
     address_lines = [
         clean(df.iloc[11, 0]),
         clean(df.iloc[12, 0]),
@@ -125,10 +100,6 @@ def process_sheet(df, party_df):   # ✅ added party_df
         row["State"] = state
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
-
-        # ✅ NEW PARTY + CONSIGNEE
-        row["Party Name"] = party_name
-        row["Consignee Name"] = party_name
 
         row["Consignee State"] = pos
         row["Consignee Pincode"] = clean(df.iloc[15, 5])
@@ -185,6 +156,7 @@ def process_sheet(df, party_df):   # ✅ added party_df
         row["Billedqty"] = safe(df.iloc[i, 6])
         row["Rate"] = safe(df.iloc[i, 8])
 
+        # ✅ NEW: DISCOUNT (COLUMN J)
         row["Dis%"] = safe(df.iloc[i, 9])
 
         # =========================
