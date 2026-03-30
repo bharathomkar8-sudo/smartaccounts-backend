@@ -8,14 +8,10 @@ from mapper import process_sheet
 
 app = Flask(__name__)
 
-# ✅ FIX 1: Prevent large file error (413)
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 uploaded_file = None
 
-# =========================
-# UPLOAD PAGE
-# =========================
 @app.route('/', methods=['GET', 'POST'])
 def upload():
     global uploaded_file
@@ -48,9 +44,6 @@ def upload():
     </form>
     '''
 
-# =========================
-# PROCESS
-# =========================
 @app.route('/process', methods=['POST'])
 def process():
     global uploaded_file
@@ -62,7 +55,6 @@ def process():
     selected_sheets = request.form.getlist('sheets')
     output_files = []
 
-    # ✅ NEW: READ GST SHEET ONCE
     try:
         gst_df = pd.read_excel(xls, sheet_name="GST", header=None)
     except Exception as e:
@@ -71,13 +63,11 @@ def process():
 
     for sheet in selected_sheets:
         try:
-            # ❌ Skip GST sheet itself
             if sheet == "GST":
                 continue
 
             df = pd.read_excel(xls, sheet_name=sheet, header=None)
 
-            # ✅ FIX: PASS gst_df
             out_df = process_sheet(df, gst_df)
 
             if out_df is None or out_df.empty:
@@ -87,7 +77,15 @@ def process():
             out_df.to_excel(output, index=False)
             output.seek(0)
 
-            output_files.append((f"{sheet}.xlsx", output))
+            # ✅ ONLY CHANGE HERE
+            try:
+                inv_no = str(out_df["VCH No / Inv No"].iloc[0])
+            except:
+                inv_no = sheet
+
+            filename = f"{inv_no}.xlsx"
+
+            output_files.append((filename, output))
 
         except Exception as e:
             print("ERROR:", sheet, e)
@@ -96,7 +94,6 @@ def process():
     if not output_files:
         return "No output generated"
 
-    # ZIP OUTPUT
     memory_file = BytesIO()
 
     with zipfile.ZipFile(memory_file, 'w') as zf:
