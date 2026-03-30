@@ -14,6 +14,26 @@ COLUMNS = [
 ]
 
 # =========================
+# CLEAN FUNCTION (NEW)
+# =========================
+def clean(val):
+    if pd.isna(val):
+        return ""
+    val = str(val).strip()
+    if val.lower() == "nan":
+        return ""
+    return val
+
+# =========================
+# DATE FORMAT FUNCTION (NEW)
+# =========================
+def format_date(val):
+    try:
+        return pd.to_datetime(val).strftime("%d-%m-%Y")
+    except:
+        return ""
+
+# =========================
 # MAIN FUNCTION
 # =========================
 def process_sheet(df):
@@ -24,28 +44,28 @@ def process_sheet(df):
     # HEADER VALUES (FIXED CELLS)
     # =========================
     voucher_type = "Sales E-Invoice"
-    vch_no = str(df.iloc[10, 16])     # Q11
-    vch_date = df.iloc[11, 16]        # Q12
-    order_no = str(df.iloc[19, 1])    # B20
-    order_date = df.iloc[20, 1]       # B21
-    other_ref = str(df.iloc[12, 16])  # Q13
-    pos = str(df.iloc[14, 5])         # F15
+    vch_no = clean(df.iloc[10, 16])     # Q11
+    vch_date = format_date(df.iloc[11, 16])   # Q12
+    order_no = clean(df.iloc[19, 1])    # B20
+    order_date = format_date(df.iloc[20, 1])  # B21
+    other_ref = clean(df.iloc[12, 16])  # Q13
+    pos = clean(df.iloc[14, 5])         # F15
 
-    state = str(df.iloc[14, 1])       # B15
-    pincode = str(df.iloc[15, 1])     # B16
-    gst = str(df.iloc[16, 1])         # B17
+    state = clean(df.iloc[14, 1])       # B15
+    pincode = clean(df.iloc[15, 1])     # B16
+    gst = clean(df.iloc[16, 1])         # B17
 
     # ADDRESS (LINE BY LINE — NOT COMBINED)
     address_lines = [
-        str(df.iloc[11, 0]),  # A12
-        str(df.iloc[12, 0]),  # A13
-        str(df.iloc[13, 0])   # A14
+        clean(df.iloc[11, 0]),  # A12
+        clean(df.iloc[12, 0]),  # A13
+        clean(df.iloc[13, 0])   # A14
     ]
 
     # CONSIGNEE ADDRESS (LINE BY LINE)
     con_address_lines = [
-        str(df.iloc[12, 4]),  # E13
-        str(df.iloc[13, 4])   # E14
+        clean(df.iloc[12, 4]),  # E13
+        clean(df.iloc[13, 4])   # E14
     ]
 
     # =========================
@@ -59,7 +79,10 @@ def process_sheet(df):
         if pd.isna(desc):
             continue
 
-        desc = str(desc).strip()
+        desc = clean(desc)
+
+        if desc == "":
+            continue
 
         if desc.lower() == "end here":
             break
@@ -82,7 +105,7 @@ def process_sheet(df):
         row["Party GSTIN"] = gst
 
         row["Consignee State"] = pos
-        row["Consignee Pincode"] = str(df.iloc[15, 5])  # F16
+        row["Consignee Pincode"] = clean(df.iloc[15, 5])  # F16
         row["Con GSTIN"] = gst
 
         # =========================
@@ -115,11 +138,16 @@ def process_sheet(df):
             row["Is Item Header"] = "Yes"
 
         # =========================
-        # SAFE VALUE FUNCTION
+        # SAFE VALUE FUNCTION (UPDATED)
         # =========================
         def safe(val):
-            if pd.isna(val) or val == 0:
+            if pd.isna(val):
                 return ""
+            try:
+                if float(val) == 0:
+                    return ""
+            except:
+                pass
             return val
 
         # =========================
