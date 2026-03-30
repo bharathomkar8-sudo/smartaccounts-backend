@@ -34,11 +34,22 @@ def format_date(val):
         return ""
 
 # =========================
-# MAIN FUNCTION
+# MAIN FUNCTION (UPDATED)
 # =========================
-def process_sheet(df):
+def process_sheet(df, party_df):
 
     rows = []
+
+    # =========================
+    # PARTY LOOKUP DICT (NEW)
+    # =========================
+    party_map = {}
+    for i in range(1, len(party_df)):
+        gst_key = clean(party_df.iloc[i, 0])
+        name_val = clean(party_df.iloc[i, 1])
+
+        if gst_key != "":
+            party_map[gst_key] = name_val
 
     # =========================
     # HEADER VALUES
@@ -55,6 +66,22 @@ def process_sheet(df):
     pincode = clean(df.iloc[15, 1])
     gst = clean(df.iloc[16, 1])
 
+    # =========================
+    # PARTY NAME LOOKUP (NEW)
+    # =========================
+    gst_key = gst.strip()
+    party_name = ""
+    error_flag = False
+
+    if gst_key in party_map:
+        party_name = party_map[gst_key]
+    else:
+        party_name = ""
+        error_flag = True
+
+    # =========================
+    # ADDRESS
+    # =========================
     address_lines = [
         clean(df.iloc[11, 0]),
         clean(df.iloc[12, 0]),
@@ -90,7 +117,13 @@ def process_sheet(df):
         # HEADER FILL
         # =========================
         row["Voucher Type"] = voucher_type
-        row["VCH No / Inv No"] = vch_no
+
+        # ✅ ERROR HANDLING
+        if error_flag:
+            row["VCH No / Inv No"] = vch_no + "-ERROR"
+        else:
+            row["VCH No / Inv No"] = vch_no
+
         row["VCH Date"] = vch_date
         row["Order No"] = order_no
         row["Order Date"] = order_date
@@ -100,6 +133,10 @@ def process_sheet(df):
         row["State"] = state
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
+
+        # ✅ PARTY + CONSIGNEE (NEW)
+        row["Party Name"] = party_name
+        row["Consignee Name"] = party_name
 
         row["Consignee State"] = pos
         row["Consignee Pincode"] = clean(df.iloc[15, 5])
@@ -156,7 +193,6 @@ def process_sheet(df):
         row["Billedqty"] = safe(df.iloc[i, 6])
         row["Rate"] = safe(df.iloc[i, 8])
 
-        # ✅ NEW: DISCOUNT (COLUMN J)
         row["Dis%"] = safe(df.iloc[i, 9])
 
         # =========================
