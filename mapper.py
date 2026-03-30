@@ -8,22 +8,8 @@ def clean(val):
 # =========================
 # GET VALUE NEXT TO LABEL
 # =========================
-def get_value_next_to_label(df, row_index, label):
-    try:
-        row = df.iloc[row_index]
-
-        for i in range(len(row)):
-            cell = str(row[i]).strip().lower()
-
-            if label.lower() in cell:
-                val = row[i + 1]
-                if pd.notna(val):
-                    return str(val).strip()
-    except:
-        pass
-
-    return ""
-
+consignee_state = get_value_next_to_label_right(df, 14, "state")
+consignee_pincode = get_value_next_to_label_right(df, 15, "pincode")
 # =========================
 # MAIN FUNCTION
 # =========================
