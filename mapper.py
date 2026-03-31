@@ -40,9 +40,6 @@ def process_sheet(df, gst_df):
 
     rows = []
 
-    # =========================
-    # HEADER VALUES
-    # =========================
     voucher_type = "Sales E-Invoice"
     vch_no = clean(df.iloc[10, 16])     
     vch_date = format_date(df.iloc[11, 16])
@@ -56,7 +53,7 @@ def process_sheet(df, gst_df):
     gst = clean(df.iloc[16, 1])
 
     # =========================
-    # PARTY NAME LOGIC
+    # PARTY NAME LOGIC (ONLY ADDITION)
     # =========================
     party_name = ""
 
@@ -66,7 +63,7 @@ def process_sheet(df, gst_df):
         if not match.empty:
             party_name = match.iloc[0, 1]
         else:
-            party_name = clean(df.iloc[10, 0])
+            party_name = clean(df.iloc[10, 0])   # A11 fallback
 
     except:
         party_name = clean(df.iloc[10, 0])
@@ -105,9 +102,6 @@ def process_sheet(df, gst_df):
 
         row = dict.fromkeys(COLUMNS, "")
 
-        # =========================
-        # HEADER FILL
-        # =========================
         row["Voucher Type"] = voucher_type
         row["VCH No / Inv No"] = vch_no
         row["VCH Date"] = vch_date
@@ -121,7 +115,7 @@ def process_sheet(df, gst_df):
         row["Party GSTIN"] = gst
 
         # =========================
-        # PARTY + CONSIGNEE
+        # PARTY + CONSIGNEE (UNCHANGED)
         # =========================
         row["Party Name"] = party_name
         row["Consignee Name"] = party_name
@@ -130,24 +124,15 @@ def process_sheet(df, gst_df):
         row["Consignee Pincode"] = clean(df.iloc[15, 5])
         row["Con GSTIN"] = gst
 
-        # =========================
-        # DESCRIPTION
-        # =========================
         row["Description"] = desc
         row["Item header"] = desc
 
-        # =========================
-        # ADDRESS FLOW
-        # =========================
         if i - 25 < len(address_lines):
             row["Address"] = address_lines[i - 25]
 
         if i - 25 < len(con_address_lines):
             row["Con Address"] = con_address_lines[i - 25]
 
-        # =========================
-        # ITEM CODE
-        # =========================
         item_val = df.iloc[i, 2]
 
         if isinstance(item_val, (int, float)) and item_val > 1:
@@ -158,9 +143,6 @@ def process_sheet(df, gst_df):
         if row["Item Name / Code"] == "Header":
             row["Is Item Header"] = "Yes"
 
-        # =========================
-        # SAFE
-        # =========================
         def safe(val):
             if pd.isna(val):
                 return ""
@@ -171,9 +153,6 @@ def process_sheet(df, gst_df):
                 pass
             return val
 
-        # =========================
-        # COLUMN MAPPING
-        # =========================
         row["width"] = safe(df.iloc[i, 3])
         row["Height"] = safe(df.iloc[i, 4])
         row["Qty"] = safe(df.iloc[i, 5])
@@ -181,12 +160,8 @@ def process_sheet(df, gst_df):
         row["Billedqty"] = safe(df.iloc[i, 6])
         row["Rate"] = safe(df.iloc[i, 8])
 
-        # DISCOUNT
         row["Dis%"] = safe(df.iloc[i, 9])
 
-        # =========================
-        # CALCULATION (UNCHANGED)
-        # =========================
         try:
             billedqty = float(row["Billedqty"]) if row["Billedqty"] != "" else 0
             rate = float(row["Rate"]) if row["Rate"] != "" else 0
@@ -200,25 +175,16 @@ def process_sheet(df, gst_df):
         row["Taxable Value"] = taxable if taxable else ""
         row["Amount"] = amount if amount else ""
 
-        # =========================
-        # ✅ TAX PICKUP (NEW)
-        # =========================
-        cgst_amt = safe(df.iloc[i, 12])   # M
-        sgst_amt = safe(df.iloc[i, 14])   # O
-        igst_amt = safe(df.iloc[i, 16])   # Q
+        cgst_amt = safe(df.iloc[i, 12])
+        sgst_amt = safe(df.iloc[i, 14])
+        igst_amt = safe(df.iloc[i, 16])
 
         row["CGST Amt"] = cgst_amt
         row["SGST Amount"] = sgst_amt
         row["IGST Amount"] = igst_amt
 
-        # =========================
-        # ROUND OFF (NEW)
-        # =========================
         row["Round off"] = ""
 
-        # =========================
-        # INVOICE AMT (NEW)
-        # =========================
         try:
             amt = float(row["Amount"]) if row["Amount"] != "" else 0
             cgst = float(cgst_amt) if cgst_amt != "" else 0
