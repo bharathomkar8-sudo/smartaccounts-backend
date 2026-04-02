@@ -1,6 +1,5 @@
 from flask import Flask, request, send_file, render_template_string
 import pandas as pd
-import zipfile
 from io import BytesIO
 
 # 👉 IMPORT MAPPER
@@ -52,7 +51,9 @@ def process():
     xls = pd.ExcelFile(uploaded_file)
 
     selected_sheets = request.form.getlist('sheets')
-    output_files = []
+
+    # ✅ NEW: COMBINED DATA
+    combined_data = []
 
     try:
         gst_df = pd.read_excel(xls, sheet_name="GST", header=None)
@@ -70,72 +71,73 @@ def process():
             if out_df is None or out_df.empty:
                 continue
 
-            # =========================
-            # ✅ UPDATED EXPORT WITH FORMATTING
-            # =========================
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            # ✅ ADD SHEET NAME (IMPORTANT)
+            out_df["Source Sheet"] = sheet
 
-            output = BytesIO()
-
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                out_df.to_excel(writer, index=False, sheet_name="Sheet1")
-
-                ws = writer.sheets["Sheet1"]
-
-                # Header style
-                header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-
-                for cell in ws[1]:
-                    cell.font = Font(bold=True)
-                    cell.fill = header_fill
-                    cell.alignment = Alignment(horizontal="center", vertical="center")
-
-                # Auto column width
-                for col in ws.columns:
-                    max_length = 0
-                    col_letter = col[0].column_letter
-
-                    for cell in col:
-                        try:
-                            if cell.value:
-                                max_length = max(max_length, len(str(cell.value)))
-                        except:
-                            pass
-
-                    ws.column_dimensions[col_letter].width = max_length + 2
-
-                # Borders + alignment
-                thin = Border(
-                    left=Side(style='thin'),
-                    right=Side(style='thin'),
-                    top=Side(style='thin'),
-                    bottom=Side(style='thin')
-                )
-
-                for row in ws.iter_rows():
-                    for cell in row:
-                        cell.border = thin
-                        cell.alignment = Alignment(vertical="center")
-
-            output.seek(0)
-            output_files.append((f"{sheet}.xlsx", output))
+            # ✅ STORE DATA
+            combined_data.append(out_df)
 
         except Exception as e:
             print("ERROR:", sheet, e)
             continue
 
-    if not output_files:
+    # ✅ NO DATA CHECK
+    if not combined_data:
         return "No output generated"
 
-    memory_file = BytesIO()
+    # ✅ COMBINE ALL
+    final_df = pd.concat(combined_data, ignore_index=True)
 
-    with zipfile.ZipFile(memory_file, 'w') as zf:
-        for filename, data in output_files:
-            zf.writestr(filename, data.getvalue())
+    # =========================
+    # ✅ CREATE ONE EXCEL
+    # =========================
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-    memory_file.seek(0)
+    output = BytesIO()
 
-    return send_file(memory_file, download_name="output.zip", as_attachment=True)
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        final_df.to_excel(writer, index=False, sheet_name="Processed_Data")
+
+        ws = writer.sheets["Processed_Data"]
+
+        # Header style
+        header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Auto column width
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+
+            for cell in col:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+
+            ws.column_dimensions[col_letter].width = max_length + 2
+
+        # Borders
+        thin = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.border = thin
+                cell.alignment = Alignment(vertical="center")
+
+    output.seek(0)
+
+    return send_file(output, download_name="Processed_Output.xlsx", as_attachment=True)
 
 
 if __name__ == "__main__":
