@@ -63,7 +63,7 @@ def process_sheet(df, gst_df):
         if not match.empty:
             party_name = match.iloc[0, 1]
         else:
-            party_name = clean(df.iloc[10, 0])   # A11 fallback
+            party_name = clean(df.iloc[10, 0])
 
     except:
         party_name = clean(df.iloc[10, 0])
@@ -114,9 +114,7 @@ def process_sheet(df, gst_df):
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
 
-        # =========================
-        # PARTY + CONSIGNEE (UNCHANGED)
-        # =========================
+        # PARTY + CONSIGNEE
         row["Party Name"] = party_name
         row["Consignee Name"] = party_name
 
@@ -182,6 +180,42 @@ def process_sheet(df, gst_df):
         row["CGST Amt"] = cgst_amt
         row["SGST Amount"] = sgst_amt
         row["IGST Amount"] = igst_amt
+
+        # =========================
+        # LEDGER MAPPING (ADDED)
+        # =========================
+        try:
+            cgst_val = float(cgst_amt) if cgst_amt != "" else 0
+            sgst_val = float(sgst_amt) if sgst_amt != "" else 0
+            igst_val = float(igst_amt) if igst_amt != "" else 0
+        except:
+            cgst_val, sgst_val, igst_val = 0, 0, 0
+
+        # Sales Ledger
+        if cgst_val == 0 and igst_val == 0:
+            row["Sales Ledger"] = "Header"
+        elif igst_val > 0:
+            row["Sales Ledger"] = "IGST Sales@18%"
+        elif cgst_val > 0:
+            row["Sales Ledger"] = "GST Sales@18%"
+
+        # CGST Ledger
+        if cgst_val > 0:
+            row["CGST Ledger"] = "OUTPUT CGST"
+        else:
+            row["CGST Ledger"] = ""
+
+        # SGST Ledger
+        if sgst_val > 0:
+            row["SGST Ledger"] = "OUTPUT SGST"
+        else:
+            row["SGST Ledger"] = ""
+
+        # IGST Ledger
+        if igst_val > 0:
+            row["IGST Ledger"] = "OUTPUT IGST"
+        else:
+            row["IGST Ledger"] = ""
 
         row["Round off"] = ""
 
