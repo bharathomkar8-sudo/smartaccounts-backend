@@ -1,8 +1,5 @@
 import pandas as pd
 
-# =========================
-# FINAL OUTPUT COLUMNS
-# =========================
 COLUMNS = [
     "Voucher Type","VCH No / Inv No","Description","VCH Date","Order No","Order Date","Other Ref","POS",
     "Party Name","Address","State","Pincode","Party GSTIN",
@@ -21,9 +18,10 @@ def clean(val):
         return ""
     return val
 
+# ✅ FIXED DATE
 def format_date(val):
     try:
-        return pd.to_datetime(val).strftime("%d-%m-%Y")
+        return pd.to_datetime(val, dayfirst=True).strftime("%d-%m-%Y")
     except:
         return ""
 
@@ -35,7 +33,7 @@ def process_sheet(df, gst_df):
     vch_no = clean(df.iloc[10, 16])     
     vch_date = format_date(df.iloc[11, 16])
     order_no = clean(df.iloc[19, 1])
-    order_date = format_date(df.iloc[20, 1])
+    order_date = clean(df.iloc[20, 1])  # untouched as per your instruction
     other_ref = clean(df.iloc[12, 16])
     pos = clean(df.iloc[14, 5])
 
@@ -47,12 +45,10 @@ def process_sheet(df, gst_df):
 
     try:
         match = gst_df[gst_df.iloc[:, 0] == gst]
-
         if not match.empty:
             party_name = match.iloc[0, 1]
         else:
             party_name = clean(df.iloc[10, 0])
-
     except:
         party_name = clean(df.iloc[10, 0])
 
@@ -70,9 +66,6 @@ def process_sheet(df, gst_df):
     for i in range(25, len(df)):
 
         desc = df.iloc[i, 1]
-
-        # ❌ removed skipping logic here
-
         desc = clean(desc)
 
         if desc.lower() == "end here":
@@ -191,4 +184,22 @@ def process_sheet(df, gst_df):
 
         rows.append(row)
 
-    return pd.DataFrame(rows)
+    df_out = pd.DataFrame(rows)
+
+    # =========================
+    # HEADER FORMATTING
+    # =========================
+    with pd.ExcelWriter("output.xlsx", engine="openpyxl") as writer:
+        df_out.to_excel(writer, index=False)
+
+        ws = writer.book.active
+
+        from openpyxl.styles import Font, PatternFill
+
+        header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+
+    return df_out
