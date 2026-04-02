@@ -13,9 +13,6 @@ COLUMNS = [
     "IGST Ledger","IGST Amount","Round off","Invoice Amt","Item header"
 ]
 
-# =========================
-# CLEAN FUNCTION
-# =========================
 def clean(val):
     if pd.isna(val):
         return ""
@@ -24,18 +21,12 @@ def clean(val):
         return ""
     return val
 
-# =========================
-# DATE FORMAT FUNCTION
-# =========================
 def format_date(val):
     try:
         return pd.to_datetime(val).strftime("%d-%m-%Y")
     except:
         return ""
 
-# =========================
-# MAIN FUNCTION
-# =========================
 def process_sheet(df, gst_df):
 
     rows = []
@@ -52,25 +43,17 @@ def process_sheet(df, gst_df):
     pincode = clean(df.iloc[15, 1])
     gst = clean(df.iloc[16, 1])
 
-    # =========================
-    # PARTY NAME LOGIC (ONLY ADDITION)
-    # =========================
     party_name = ""
 
     try:
         match = gst_df[gst_df.iloc[:, 0] == gst]
-
         if not match.empty:
             party_name = match.iloc[0, 1]
         else:
             party_name = clean(df.iloc[10, 0])
-
     except:
         party_name = clean(df.iloc[10, 0])
 
-    # =========================
-    # ADDRESS
-    # =========================
     address_lines = [
         clean(df.iloc[11, 0]),
         clean(df.iloc[12, 0]),
@@ -82,9 +65,6 @@ def process_sheet(df, gst_df):
         clean(df.iloc[13, 4])
     ]
 
-    # =========================
-    # LOOP
-    # =========================
     for i in range(25, len(df)):
 
         desc = df.iloc[i, 1]
@@ -94,7 +74,10 @@ def process_sheet(df, gst_df):
 
         desc = clean(desc)
 
+        # ✅ FIX APPLIED HERE
         if desc == "":
+            row = dict.fromkeys(COLUMNS, "")
+            rows.append(row)
             continue
 
         if desc.lower() == "end here":
@@ -114,7 +97,6 @@ def process_sheet(df, gst_df):
         row["Pincode"] = pincode
         row["Party GSTIN"] = gst
 
-        # PARTY + CONSIGNEE
         row["Party Name"] = party_name
         row["Consignee Name"] = party_name
 
@@ -181,9 +163,6 @@ def process_sheet(df, gst_df):
         row["SGST Amount"] = sgst_amt
         row["IGST Amount"] = igst_amt
 
-        # =========================
-        # LEDGER MAPPING (ADDED)
-        # =========================
         try:
             cgst_val = float(cgst_amt) if cgst_amt != "" else 0
             sgst_val = float(sgst_amt) if sgst_amt != "" else 0
@@ -191,7 +170,6 @@ def process_sheet(df, gst_df):
         except:
             cgst_val, sgst_val, igst_val = 0, 0, 0
 
-        # Sales Ledger
         if cgst_val == 0 and igst_val == 0:
             row["Sales Ledger"] = "Header"
         elif igst_val > 0:
@@ -199,23 +177,9 @@ def process_sheet(df, gst_df):
         elif cgst_val > 0:
             row["Sales Ledger"] = "GST Sales@18%"
 
-        # CGST Ledger
-        if cgst_val > 0:
-            row["CGST Ledger"] = "OUTPUT CGST"
-        else:
-            row["CGST Ledger"] = ""
-
-        # SGST Ledger
-        if sgst_val > 0:
-            row["SGST Ledger"] = "OUTPUT SGST"
-        else:
-            row["SGST Ledger"] = ""
-
-        # IGST Ledger
-        if igst_val > 0:
-            row["IGST Ledger"] = "OUTPUT IGST"
-        else:
-            row["IGST Ledger"] = ""
+        row["CGST Ledger"] = "OUTPUT CGST" if cgst_val > 0 else ""
+        row["SGST Ledger"] = "OUTPUT SGST" if sgst_val > 0 else ""
+        row["IGST Ledger"] = "OUTPUT IGST" if igst_val > 0 else ""
 
         row["Round off"] = ""
 
