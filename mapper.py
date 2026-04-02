@@ -18,7 +18,7 @@ def clean(val):
         return ""
     return val
 
-# ✅ FIXED DATE
+# ✅ DATE FIX
 def format_date(val):
     try:
         return pd.to_datetime(val, dayfirst=True).strftime("%d-%m-%Y")
@@ -33,7 +33,7 @@ def process_sheet(df, gst_df):
     vch_no = clean(df.iloc[10, 16])     
     vch_date = format_date(df.iloc[11, 16])
     order_no = clean(df.iloc[19, 1])
-    order_date = clean(df.iloc[20, 1])  # untouched as per your instruction
+    order_date = format_date(df.iloc[20, 1])   # ✅ FIXED
     other_ref = clean(df.iloc[12, 16])
     pos = clean(df.iloc[14, 5])
 
@@ -187,19 +187,48 @@ def process_sheet(df, gst_df):
     df_out = pd.DataFrame(rows)
 
     # =========================
-    # HEADER FORMATTING
+    # FORMATTING
     # =========================
     with pd.ExcelWriter("output.xlsx", engine="openpyxl") as writer:
         df_out.to_excel(writer, index=False)
 
-        ws = writer.book.active
+        ws = writer.sheets["Sheet1"]
 
-        from openpyxl.styles import Font, PatternFill
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+        # Header style
         header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
         for cell in ws[1]:
             cell.font = Font(bold=True)
             cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Auto column width
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+
+            for cell in col:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+
+            ws.column_dimensions[col_letter].width = max_length + 2
+
+        # Borders
+        thin = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.border = thin
+                cell.alignment = Alignment(vertical="center")
 
     return df_out
