@@ -47,10 +47,12 @@ def process_sheet(df, gst_df):
 
     try:
         match = gst_df[gst_df.iloc[:, 0] == gst]
+
         if not match.empty:
             party_name = match.iloc[0, 1]
         else:
             party_name = clean(df.iloc[10, 0])
+
     except:
         party_name = clean(df.iloc[10, 0])
 
@@ -69,16 +71,9 @@ def process_sheet(df, gst_df):
 
         desc = df.iloc[i, 1]
 
-        if pd.isna(desc):
-            continue
+        # ❌ removed skipping logic here
 
         desc = clean(desc)
-
-        # ✅ FIX APPLIED HERE
-        if desc == "":
-            row = dict.fromkeys(COLUMNS, "")
-            rows.append(row)
-            continue
 
         if desc.lower() == "end here":
             break
