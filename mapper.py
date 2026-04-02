@@ -18,7 +18,6 @@ def clean(val):
         return ""
     return val
 
-# ✅ DATE FIX
 def format_date(val):
     try:
         return pd.to_datetime(val, dayfirst=True).strftime("%d-%m-%Y")
@@ -32,8 +31,16 @@ def process_sheet(df, gst_df):
     voucher_type = "Sales E-Invoice"
     vch_no = clean(df.iloc[10, 16])     
     vch_date = format_date(df.iloc[11, 16])
-    order_no = clean(df.iloc[19, 1])
-    order_date = format_date(df.iloc[20, 1])   # ✅ FIXED
+
+    # ✅ UPDATED ORDER LOGIC
+    base_order_no = clean(df.iloc[19, 1])
+    order_date = format_date(df.iloc[20, 1])
+
+    if order_date:
+        order_no = f"{base_order_no} dt:{order_date}"
+    else:
+        order_no = base_order_no
+
     other_ref = clean(df.iloc[12, 16])
     pos = clean(df.iloc[14, 5])
 
@@ -76,9 +83,17 @@ def process_sheet(df, gst_df):
         row["Voucher Type"] = voucher_type
         row["VCH No / Inv No"] = vch_no
         row["VCH Date"] = vch_date
-        row["Order No"] = order_no
-        row["Order Date"] = order_date
-        row["Other Ref"] = other_ref
+
+        # ✅ ONLY FIRST ROW SHOW
+        if len(rows) == 0:
+            row["Order No"] = order_no
+            row["Order Date"] = order_date
+            row["Other Ref"] = other_ref
+        else:
+            row["Order No"] = ""
+            row["Order Date"] = ""
+            row["Other Ref"] = ""
+
         row["POS"] = pos
 
         row["State"] = state
@@ -186,9 +201,7 @@ def process_sheet(df, gst_df):
 
     df_out = pd.DataFrame(rows)
 
-    # =========================
-    # FORMATTING
-    # =========================
+    # FORMATTING (unchanged)
     with pd.ExcelWriter("output.xlsx", engine="openpyxl") as writer:
         df_out.to_excel(writer, index=False)
 
@@ -196,7 +209,6 @@ def process_sheet(df, gst_df):
 
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-        # Header style
         header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
         for cell in ws[1]:
@@ -204,21 +216,17 @@ def process_sheet(df, gst_df):
             cell.fill = header_fill
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Auto column width
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
-
             for cell in col:
                 try:
                     if cell.value:
                         max_length = max(max_length, len(str(cell.value)))
                 except:
                     pass
-
             ws.column_dimensions[col_letter].width = max_length + 2
 
-        # Borders
         thin = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
